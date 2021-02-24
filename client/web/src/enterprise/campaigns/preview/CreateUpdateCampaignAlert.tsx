@@ -35,7 +35,7 @@ export const CreateUpdateCampaignAlert: React.FunctionComponent<CreateUpdateCamp
                 ? await applyCampaign({ campaignSpec: specID, campaign: campaignID })
                 : await createCampaign({ campaignSpec: specID })
             history.push(campaign.url)
-            telemetryService.logViewEvent(`CampaignDetailsPageAfter${campaignID ? 'Create' : 'Update'}`)
+            telemetryService.logViewEvent(`CampaignDetailsPageAfter${campaignID ? 'Update' : 'Create'}`)
         } catch (error) {
             setIsLoading(error)
         }

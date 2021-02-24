@@ -87,6 +87,24 @@ func checkLicense() error {
 // is disabled.
 const maxUnlicensedChangesets = 5
 
+type campaignSpecCreatedArg struct {
+	ChangesetSpecsCount int `json:"changeset_specs_count"`
+}
+
+type campaignEventArg struct {
+	CampaignID int64 `json:"campaign_id"`
+}
+
+func logBackendEvent(ctx context.Context, db dbutil.DB, name string, args interface{}) error {
+	actor := actor.FromContext(ctx)
+	jsonArg, err := json.Marshal(args)
+	if err != nil {
+		return err
+	}
+	return usagestats.LogBackendEvent(db, actor.UID, name, jsonArg)
+}
+
+
 func (r *Resolver) ChangesetByID(ctx context.Context, id graphql.ID) (graphqlbackend.ChangesetResolver, error) {
 	if err := campaignsEnabled(ctx); err != nil {
 		return nil, err
@@ -287,6 +305,11 @@ func (r *Resolver) CreateCampaign(ctx context.Context, args *graphqlbackend.Crea
 		return nil, err
 	}
 
+	arg := &campaignEventArg{campaign.ID}
+	if err := logBackendEvent(ctx, r.store.DB(), "CampaignCreated", arg); err != nil {
+		return nil, err
+	}
+
 	return &campaignResolver{store: r.store, Campaign: campaign}, nil
 }
 
@@ -332,6 +355,11 @@ func (r *Resolver) ApplyCampaign(ctx context.Context, args *graphqlbackend.Apply
 		} else if err == service.ErrMatchingCampaignExists {
 			return nil, ErrMatchingCampaignExists{}
 		}
+		return nil, err
+	}
+
+	arg := &campaignEventArg{campaign.ID}
+	if err := logBackendEvent(ctx, r.store.DB(), "CampaignCreatedOrUpdated", arg); err != nil {
 		return nil, err
 	}
 
@@ -385,7 +413,8 @@ func (r *Resolver) CreateCampaignSpec(ctx context.Context, args *graphqlbackend.
 		return nil, err
 	}
 
-	if err := logCampaignSpecCreated(ctx, r.store.DB(), &opts); err != nil {
+	eventArg := &campaignSpecCreatedArg{ChangesetSpecsCount: len(opts.ChangesetSpecRandIDs)}
+	if err := logBackendEvent(ctx, r.store.DB(), "CampaignSpecCreated", eventArg); err != nil {
 		return nil, err
 	}
 
@@ -395,24 +424,6 @@ func (r *Resolver) CreateCampaignSpec(ctx context.Context, args *graphqlbackend.
 	}
 
 	return specResolver, nil
-}
-
-func logCampaignSpecCreated(ctx context.Context, db dbutil.DB, opts *service.CreateCampaignSpecOpts) error {
-	// Log an analytics event when a CampaignSpec has been created.
-	// See internal/usagestats/campaigns.go.
-	actor := actor.FromContext(ctx)
-
-	type eventArg struct {
-		ChangesetSpecsCount int `json:"changeset_specs_count"`
-	}
-	arg := eventArg{ChangesetSpecsCount: len(opts.ChangesetSpecRandIDs)}
-
-	jsonArg, err := json.Marshal(arg)
-	if err != nil {
-		return err
-	}
-
-	return usagestats.LogBackendEvent(db, actor.UID, "CampaignSpecCreated", json.RawMessage(jsonArg))
 }
 
 func (r *Resolver) CreateChangesetSpec(ctx context.Context, args *graphqlbackend.CreateChangesetSpecArgs) (graphqlbackend.ChangesetSpecResolver, error) {
@@ -516,6 +527,14 @@ func (r *Resolver) DeleteCampaign(ctx context.Context, args *graphqlbackend.Dele
 	svc := service.New(r.store)
 	// 🚨 SECURITY: DeleteCampaign checks whether current user is authorized.
 	err = svc.DeleteCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+
+	arg := &campaignEventArg{campaignID}
+	if err := logBackendEvent(ctx, r.store.DB(), "CampaignDeleted", arg); err != nil {
+		return nil, err
+	}
 	return &graphqlbackend.EmptyResponse{}, err
 }
 
@@ -742,6 +761,11 @@ func (r *Resolver) CloseCampaign(ctx context.Context, args *graphqlbackend.Close
 	campaign, err := svc.CloseCampaign(ctx, campaignID, args.CloseChangesets)
 	if err != nil {
 		return nil, errors.Wrap(err, "closing campaign")
+	}
+
+	arg := &campaignEventArg{campaignID}
+	if err := logBackendEvent(ctx, r.store.DB(), "CampaignClosed", arg); err != nil {
+		return nil, err
 	}
 
 	return &campaignResolver{store: r.store, Campaign: campaign}, nil
