@@ -297,7 +297,6 @@ func (e *executor) publishChangeset(ctx context.Context, asDraft bool) (err erro
 	}
 	// Set the changeset to published.
 	e.ch.PublicationState = campaigns.ChangesetPublicationStatePublished
-
 	return nil
 }
 
