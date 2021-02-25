@@ -35,6 +35,7 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dineshappavoo/basex v0.0.0-20170425072625-481a6f6dc663
 	github.com/dnaeon/go-vcr v1.0.1
+	github.com/drexedam/gravatar v0.0.0-20170403222345-e4917c5607c3
 	github.com/efritz/glock v0.0.0-20181228234553-f184d69dff2c
 	github.com/efritz/go-genlib v0.0.0-20200616012750-c21aae2e13ac // indirect
 	github.com/efritz/go-mockgen v0.0.0-20200916004441-cfcabc111002
@@ -129,6 +130,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opentracing-contrib/go-stdlib v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
+	github.com/ozankasikci/go-image-merge v0.2.3-0.20200725062803-aedf4eb2eb2c
 	github.com/peterbourgon/ff v1.7.0
 	github.com/peterhellberg/link v1.1.0
 	github.com/pkg/errors v0.9.1
@@ -152,6 +154,7 @@ require (
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0
 	github.com/shurcooL/octicon v0.0.0-20191102190552-cbb32d6a785c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546
+	github.com/slack-go/slack v0.8.1
 	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
 	github.com/sourcegraph/campaignutils v0.0.0-20201124155628-5d86cf20398d
 	github.com/sourcegraph/codeintelutils v0.0.0-20200824140252-1db3aed5cf58
@@ -180,6 +183,7 @@ require (
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/xeonx/timeago v1.0.0-rc4
+	github.com/yuin/goldmark v1.3.2
 	github.com/zenazn/goji v1.0.1 // indirect
 	go.mongodb.org/mongo-driver v1.4.1 // indirect
 	go.opencensus.io v0.22.6 // indirect
@@ -242,3 +246,5 @@ replace (
 	github.com/russross/blackfriday => github.com/russross/blackfriday v1.5.2
 	golang.org/x/oauth2 => github.com/sourcegraph/oauth2 v0.0.0-20201011192344-605770292164
 )
+
+replace github.com/ozankasikci/go-image-merge => github.com/sourcegraph/go-image-merge v0.2.3-0.20210226214948-f91742c8193e
