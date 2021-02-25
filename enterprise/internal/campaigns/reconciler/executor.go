@@ -142,33 +142,6 @@ func (e *executor) Run(ctx context.Context, plan *Plan) (err error) {
 	return e.tx.UpdateChangeset(ctx, e.ch)
 }
 
-// type changesetPublishedEventArg struct {
-// 	ChangesetID      int64  `json:"changeset_id"`
-// 	CampaignID       int64  `json:"campaign_id"`
-// 	PublicationState string `json:"publication_state"`
-// }
-//
-// func (e *executor) logChangesetPublished(ctx context.Context) error {
-// 	campaign, err := loadCampaign(ctx, e.tx, e.ch.OwnedByCampaignID)
-// 	if err != nil {
-// 		return errors.Wrap(err, "failed to load owning campaign")
-// 	}
-// 	arg := &changesetPublishedEventArg{
-// 		ChangesetID:      e.ch.ID,
-// 		CampaignID:       campaign.ID,
-// 		PublicationState: string(e.ch.PublicationState),
-// 	}
-//
-// 	jsonArg, err := json.Marshal(arg)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	usagestats.LogBackendEvent(e.tx.DB(), campaign.LastApplierID, "ChangesetPublished", jsonArg)
-//
-// 	return nil
-// }
-//
 func (e *executor) buildChangesetSource(repo *types.Repo, extSvc *types.ExternalService) (repos.ChangesetSource, error) {
 	sources, err := e.sourcer(extSvc)
 	if err != nil {
@@ -325,7 +298,6 @@ func (e *executor) publishChangeset(ctx context.Context, asDraft bool) (err erro
 	// Set the changeset to published.
 	e.ch.PublicationState = campaigns.ChangesetPublicationStatePublished
 
-	// return e.logChangesetPublished(ctx)
 	return nil
 }
 

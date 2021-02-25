@@ -104,7 +104,6 @@ func logBackendEvent(ctx context.Context, db dbutil.DB, name string, args interf
 	return usagestats.LogBackendEvent(db, actor.UID, name, jsonArg)
 }
 
-
 func (r *Resolver) ChangesetByID(ctx context.Context, id graphql.ID) (graphqlbackend.ChangesetResolver, error) {
 	if err := campaignsEnabled(ctx); err != nil {
 		return nil, err
