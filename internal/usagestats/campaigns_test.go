@@ -65,7 +65,8 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 			(id, rand_id, raw_spec, namespace_user_id)
 		VALUES
 			(1, '123', '{}', $1),
-			(2, '456', '{}', $1)
+			(2, '456', '{}', $1),
+			(3, '789', '{}', $1)
 	`, user.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -106,14 +107,19 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	campaignCreationDate1 := now.Add(-24 * 7 * 8 * time.Hour)  // 8 weeks ago
+	campaignCreationDate2 := now.Add(-24 * 3 * time.Hour)      // 3 days ago
+	campaignCreationDate3 := now.Add(-24 * 7 * 60 * time.Hour) // 60 weeks ago
+
 	// Create campaigns 1, 2
 	_, err = dbconn.Global.Exec(`
 		INSERT INTO campaigns
 			(id, name, campaign_spec_id, created_at, last_applied_at, namespace_user_id, closed_at)
 		VALUES
-			(1, 'test', 1, (NOW() - INTERVAL '8 days'), NOW(), $1, NULL),
-			(2, 'test-2', 2, NOW(), NOW(), $1, NOW())
-	`, user.ID)
+			(1, 'test',   1, $2::timestamp, NOW(), $1, NULL),
+			(2, 'test-2', 2, $3::timestamp, NOW(), $1, NOW()),
+			(3, 'test-3', 3, $4::timestamp, NOW(), $1, NULL)
+	`, user.ID, campaignCreationDate1, campaignCreationDate2, campaignCreationDate3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +143,9 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 			(8,  $1, 'github', 2, '{"2": {"detached": false}}', 'MERGED', 'PUBLISHED', 9, 7, 5),
 			(9,  $1, 'github', 2, '{"2": {"detached": false}}', 'MERGED', 'PUBLISHED', NULL, NULL, NULL),
 			(10, $1, 'github', 2, '{"2": {"detached": false}}',  NULL,    'UNPUBLISHED', 9, 7, 5),
-			(11, $1, 'github', 2, '{"2": {"detached": false}}', 'CLOSED', 'PUBLISHED', NULL, NULL, NULL)
+			(11, $1, 'github', 2, '{"2": {"detached": false}}', 'CLOSED', 'PUBLISHED', NULL, NULL, NULL),
+			(12, $1, 'github', 3, '{"3": {"detached": false}}', 'OPEN',   'PUBLISHED', 5, 7, 9),
+			(13, $1, 'github', 3, '{"3": {"detached": false}}', 'OPEN',   'PUBLISHED', NULL, NULL, NULL)
 	`, repo.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -150,13 +158,13 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 		ViewCampaignApplyPageCount:               2,
 		ViewCampaignDetailsPageAfterCreateCount:  2,
 		ViewCampaignDetailsPageAfterUpdateCount:  2,
-		CampaignsCount:                           2,
+		CampaignsCount:                           3,
 		CampaignsClosedCount:                     1,
 		ActionChangesetsUnpublishedCount:         2,
-		ActionChangesetsCount:                    6,
-		ActionChangesetsDiffStatAddedSum:         14,
-		ActionChangesetsDiffStatChangedSum:       14,
-		ActionChangesetsDiffStatDeletedSum:       14,
+		ActionChangesetsCount:                    8,
+		ActionChangesetsDiffStatAddedSum:         19,
+		ActionChangesetsDiffStatChangedSum:       21,
+		ActionChangesetsDiffStatDeletedSum:       23,
 		ActionChangesetsMergedCount:              2,
 		ActionChangesetsMergedDiffStatAddedSum:   9,
 		ActionChangesetsMergedDiffStatChangedSum: 7,
@@ -169,7 +177,7 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 		CurrentMonthUsersCount:                   2,
 		CampaignsCohorts: []*types.CampaignsCohort{
 			{
-				Week:                     "2021-02-15",
+				Week:                     campaignCreationDate1.Truncate(24 * 7 * time.Hour).Format("2006-01-02"),
 				CampaignsOpen:            1,
 				ChangesetsImported:       1,
 				ChangesetsPublished:      3,
@@ -177,7 +185,7 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 				ChangesetsPublishedDraft: 1,
 			},
 			{
-				Week:                      "2021-02-22",
+				Week:                      campaignCreationDate2.Truncate(24 * 7 * time.Hour).Format("2006-01-02"),
 				CampaignsClosed:           1,
 				ChangesetsImported:        1,
 				ChangesetsUnpublished:     2,
@@ -185,6 +193,7 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 				ChangesetsPublishedMerged: 2,
 				ChangesetsPublishedClosed: 1,
 			},
+			// campaign 3 should be ignored because it's too old
 		},
 	}
 	if diff := cmp.Diff(want, have); diff != "" {
