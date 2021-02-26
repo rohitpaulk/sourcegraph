@@ -1,31 +1,24 @@
+import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@reach/tabs'
 import * as H from 'history'
-import CloseIcon from 'mdi-react/CloseIcon'
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
-import { Observable, Subscription } from 'rxjs'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useHistory, useLocation } from 'react-router'
+import { Button } from 'reactstrap'
+import { Observable } from 'rxjs'
 import { map } from 'rxjs/operators'
-import {
-    PanelViewWithComponent,
-    PanelViewProviderRegistrationOptions,
-} from '../../../../shared/src/api/client/services/panelViews'
-import { ContributableMenu, ContributableViewContainer } from '../../../../shared/src/api/protocol/contribution'
-import { ExtensionsControllerProps } from '../../../../shared/src/extensions/controller'
-import { ActionsNavItems } from '../../../../shared/src/actions/ActionsNavItems'
+import { ContributableViewContainer } from '../../../../shared/src/api/protocol/contribution'
 import { ActivationProps } from '../../../../shared/src/components/activation/Activation'
 import { FetchFileParameters } from '../../../../shared/src/components/CodeExcerpt'
 import { Resizable } from '../../../../shared/src/components/Resizable'
-import { Spacer, Tab as Tab1, TabsWithURLViewStatePersistence } from '../Tabs'
+import { ExtensionsControllerProps } from '../../../../shared/src/extensions/controller'
 import { PlatformContextProps } from '../../../../shared/src/platform/context'
+import { VersionContextProps } from '../../../../shared/src/search/util'
 import { SettingsCascadeProps } from '../../../../shared/src/settings/settings'
 import { TelemetryProps } from '../../../../shared/src/telemetry/telemetryService'
+import { ThemeProps } from '../../../../shared/src/theme'
+import { useObservable } from '../../../../shared/src/util/useObservable'
+import { Tab as Tab1 } from '../Tabs'
 import { EmptyPanelView } from './views/EmptyPanelView'
 import { PanelView } from './views/PanelView'
-import { ThemeProps } from '../../../../shared/src/theme'
-import { VersionContextProps } from '../../../../shared/src/search/util'
-
-import { Tab, TabList, TabPanel, TabPanels, Tabs } from '@reach/tabs'
-import { useLocalStorage } from '../../../../shared/src/util/useLocalStorage'
-import { Button } from 'reactstrap'
-import { useObservable } from '../../../../shared/src/util/useObservable'
 
 interface Props
     extends ExtensionsControllerProps,
@@ -39,11 +32,6 @@ interface Props
     history: H.History
     repoName?: string
     fetchHighlightedFileLineRanges: (parameters: FetchFileParameters, force?: boolean) => Observable<string[][]>
-}
-
-interface State {
-    /** Panel views contributed by extensions. */
-    panelViews?: (PanelViewWithComponent & Pick<PanelViewProviderRegistrationOptions, 'id'>)[] | null
 }
 
 /**
@@ -74,8 +62,13 @@ interface PanelItem extends Tab1<string> {
  * Other components can contribute panel items to the panel.
  */
 
-const Panel2: React.FunctionComponent<Props> = props => {
+const Panel: React.FunctionComponent<Props> = props => {
     const [panels, setPanels] = useState<PanelItem[]>([])
+    const [tabIndex, setTabIndex] = useState(0)
+    const { hash, pathname } = useLocation()
+    const history = useHistory()
+    const handlePanelClose = useCallback(() => history.replace(pathname), [history, pathname])
+
     const items = useObservable(
         useMemo(
             () =>
@@ -85,8 +78,17 @@ const Panel2: React.FunctionComponent<Props> = props => {
             [props.extensionsController.services.panelViews]
         )
     )
-    console.log(items)
-    console.log(panels)
+
+    const handleActiveTab = useCallback(
+        (index: number): void => {
+            history.replace(`${pathname}${hash.split('=')[0]}=${panels[index].id}`)
+        },
+        [hash, history, panels, pathname]
+    )
+
+    useEffect(() => {
+        setTabIndex(panels.findIndex(({ id }) => id === `${hash.split('=')[1]}`))
+    }, [hash, panels])
 
     useEffect(() => {
         if (items?.panelViews) {
@@ -106,14 +108,12 @@ const Panel2: React.FunctionComponent<Props> = props => {
         }
     }, [items?.panelViews, props])
 
-    const [tabIndex, setTabIndex] = useLocalStorage('TABS_KEY', 0)
-    const [togglePanel, setTogglePanel] = useLocalStorage('SIDEBAR_KEY', true)
+    if (!items) {
+        return <EmptyPanelView />
+    }
 
-    const handleTabsChange = useCallback((index: number) => setTabIndex(index), [setTabIndex])
-    const handlePanelToggle = useCallback(() => setTogglePanel(!togglePanel), [setTogglePanel, togglePanel])
-
-    return items ? (
-        <Tabs className="w-100" defaultIndex={tabIndex} onChange={handleTabsChange}>
+    return (
+        <Tabs className="w-100 overflow-hidden" index={tabIndex} onChange={handleActiveTab}>
             <div className="d-flex">
                 <TabList>
                     {panels.map(({ label, id }) => (
@@ -121,130 +121,26 @@ const Panel2: React.FunctionComponent<Props> = props => {
                     ))}
                 </TabList>
                 <Button
-                    onClick={handlePanelToggle}
+                    onClick={handlePanelClose}
                     close={true}
                     className="bg-transparent border-0 close ml-auto"
                     title="Close sidebar (Alt+S/Opt+S)"
                 />
             </div>
-            <TabPanels>
+            <TabPanels className="h-100 overflow-auto">
                 {panels.map(({ id, element }) => (
                     <TabPanel key={id}>{element}</TabPanel>
                 ))}
             </TabPanels>
         </Tabs>
-    ) : (
-        <EmptyPanelView />
     )
-}
-
-class Panel extends React.PureComponent<Props, State> {
-    public state: State = {}
-
-    private subscriptions = new Subscription()
-
-    public componentDidMount(): void {
-        this.subscriptions.add(
-            this.props.extensionsController.services.panelViews
-                .getPanelViews(ContributableViewContainer.Panel)
-                .pipe(map(panelViews => ({ panelViews })))
-                .subscribe(stateUpdate => this.setState(stateUpdate))
-        )
-    }
-
-    public componentWillUnmount(): void {
-        this.subscriptions.unsubscribe()
-    }
-
-    public render(): JSX.Element | null {
-        const items = this.state.panelViews
-            ? this.state.panelViews
-                  .map(
-                      (panelView): PanelItem => ({
-                          label: panelView.title,
-                          id: panelView.id,
-                          priority: panelView.priority,
-                          element: <PanelView {...this.props} panelView={panelView} />,
-                          hasLocations: !!panelView.locationProvider,
-                      })
-                  )
-                  .sort(byPriority)
-            : []
-
-        const hasTabs = items.length > 0
-        const activePanelViewID = TabsWithURLViewStatePersistence.readFromURL(this.props.location, items)
-        const activePanelView = items.find(item => item.id === activePanelViewID)
-
-        return (
-            <div className="panel">
-                {hasTabs ? (
-                    <TabsWithURLViewStatePersistence
-                        tabs={items}
-                        tabBarEndFragment={
-                            <>
-                                <Spacer />
-                                <button
-                                    type="button"
-                                    onClick={this.onDismiss}
-                                    className="btn btn-icon tab-bar__end-fragment-other-element"
-                                    data-tooltip="Close"
-                                >
-                                    <CloseIcon className="icon-inline" />
-                                </button>
-                            </>
-                        }
-                        toolbarFragment={
-                            <ActionsNavItems
-                                {...this.props}
-                                // TODO remove references to Bootstrap from shared, get class name from prop
-                                // This is okay for now because the Panel is currently only used in the webapp
-                                listClass="nav w-100 justify-content-end"
-                                actionItemClass="nav-link"
-                                actionItemIconClass="icon-inline"
-                                menu={ContributableMenu.PanelToolbar}
-                                scope={
-                                    activePanelViewID !== undefined
-                                        ? {
-                                              type: 'panelView',
-                                              id: activePanelViewID,
-                                              hasLocations: Boolean(activePanelView?.hasLocations),
-                                          }
-                                        : undefined
-                                }
-                                wrapInList={true}
-                            />
-                        }
-                        className="panel__tabs"
-                        tabClassName="tab-bar__tab--h5like"
-                        location={this.props.location}
-                    >
-                        {items?.map(({ id, element }) => React.cloneElement(element, { key: id }))}
-                    </TabsWithURLViewStatePersistence>
-                ) : (
-                    <EmptyPanelView />
-                )}
-            </div>
-        )
-    }
-
-    private onDismiss = (): void =>
-        this.props.history.push(TabsWithURLViewStatePersistence.urlForTabID(this.props.location, null))
-}
-
-function byPriority(a: { priority: number }, b: { priority: number }): number {
-    return b.priority - a.priority
 }
 
 /** A wrapper around Panel that makes it resizable. */
 export const ResizablePanel: React.FunctionComponent<Props> = props => (
-    <div className="w-100 h-100">
-        <Resizable
-            // className="resizable-panel"
-            position="top"
-            defaultSize={350}
-            // storageKey="panel-size"
-        >
-            <Panel2 {...props} />
+    <div className="w-100 bg-code">
+        <Resizable position="top" defaultSize={350}>
+            <Panel {...props} />
         </Resizable>
     </div>
 )
