@@ -106,13 +106,13 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create campaigns 1, 2, 3, 4, 5, 6, 7, 8.
+	// Create campaigns 1, 2
 	_, err = dbconn.Global.Exec(`
 		INSERT INTO campaigns
-			(id, name, campaign_spec_id, last_applied_at, namespace_user_id, closed_at)
+			(id, name, campaign_spec_id, created_at, last_applied_at, namespace_user_id, closed_at)
 		VALUES
-			(1, 'test', 1, NOW(), $1, NULL),
-			(2, 'test-2', 2, NOW(), $1, NOW())
+			(1, 'test', 1, (NOW() - INTERVAL '8 days'), NOW(), $1, NULL),
+			(2, 'test-2', 2, NOW(), NOW(), $1, NOW())
 	`, user.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -124,18 +124,20 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 	// missing diffstat shouldn't happen anymore (due to migration), but it's still a nullable field.
 	_, err = dbconn.Global.Exec(`
 		INSERT INTO changesets
-			(id, repo_id, external_service_type, owned_by_campaign_id, external_state, publication_state, diff_stat_added, diff_stat_changed, diff_stat_deleted)
+			(id, repo_id, external_service_type, owned_by_campaign_id, campaign_ids, external_state, publication_state, diff_stat_added, diff_stat_changed, diff_stat_deleted)
 		VALUES
 		    -- tracked
-			(1, $1, 'github', NULL, 'OPEN',   'PUBLISHED', 9, 7, 5),
-			(2, $1, 'github', NULL, 'MERGED', 'PUBLISHED', 7, 9, 5),
+			(1, $1, 'github', NULL, '{"1": {"detached": false}}', 'OPEN',   'PUBLISHED', 9, 7, 5),
+			(2, $1, 'github', NULL, '{"2": {"detached": false}}', 'MERGED', 'PUBLISHED', 7, 9, 5),
 			-- created by campaign
-			(4, $1, 'github', 1, 'OPEN',   'PUBLISHED', 5, 7, 9),
-			(5, $1, 'github', 1, 'OPEN',   'PUBLISHED', NULL, NULL, NULL),
-			(6, $1, 'github', 2, NULL,     'UNPUBLISHED', 9, 7, 5),
-			(7, $1, 'github', 2, 'MERGED', 'PUBLISHED', 9, 7, 5),
-			(8, $1, 'github', 2, 'MERGED', 'PUBLISHED', NULL, NULL, NULL),
-			(9, $1, 'github', 2, NULL,     'UNPUBLISHED', 9, 7, 5)
+			(4,  $1, 'github', 1, '{"1": {"detached": false}}', 'OPEN',   'PUBLISHED', 5, 7, 9),
+			(5,  $1, 'github', 1, '{"1": {"detached": false}}', 'OPEN',   'PUBLISHED', NULL, NULL, NULL),
+			(6,  $1, 'github', 1, '{"1": {"detached": false}}', 'DRAFT',  'PUBLISHED', NULL, NULL, NULL),
+			(7,  $1, 'github', 2, '{"2": {"detached": false}}',  NULL,    'UNPUBLISHED', 9, 7, 5),
+			(8,  $1, 'github', 2, '{"2": {"detached": false}}', 'MERGED', 'PUBLISHED', 9, 7, 5),
+			(9,  $1, 'github', 2, '{"2": {"detached": false}}', 'MERGED', 'PUBLISHED', NULL, NULL, NULL),
+			(10, $1, 'github', 2, '{"2": {"detached": false}}',  NULL,    'UNPUBLISHED', 9, 7, 5),
+			(11, $1, 'github', 2, '{"2": {"detached": false}}', 'CLOSED', 'PUBLISHED', NULL, NULL, NULL)
 	`, repo.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +153,7 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 		CampaignsCount:                           2,
 		CampaignsClosedCount:                     1,
 		ActionChangesetsUnpublishedCount:         2,
-		ActionChangesetsCount:                    4,
+		ActionChangesetsCount:                    6,
 		ActionChangesetsDiffStatAddedSum:         14,
 		ActionChangesetsDiffStatChangedSum:       14,
 		ActionChangesetsDiffStatDeletedSum:       14,
@@ -165,6 +167,25 @@ func TestCampaignsUsageStatistics(t *testing.T) {
 		ChangesetSpecsCreatedCount:               4,
 		CurrentMonthContributorsCount:            1,
 		CurrentMonthUsersCount:                   2,
+		CampaignsCohorts: []*types.CampaignsCohort{
+			{
+				Week:                     "2021-02-15",
+				CampaignsOpen:            1,
+				ChangesetsImported:       1,
+				ChangesetsPublished:      3,
+				ChangesetsPublishedOpen:  2,
+				ChangesetsPublishedDraft: 1,
+			},
+			{
+				Week:                      "2021-02-22",
+				CampaignsClosed:           1,
+				ChangesetsImported:        1,
+				ChangesetsUnpublished:     2,
+				ChangesetsPublished:       3,
+				ChangesetsPublishedMerged: 2,
+				ChangesetsPublishedClosed: 1,
+			},
+		},
 	}
 	if diff := cmp.Diff(want, have); diff != "" {
 		t.Fatal(diff)
