@@ -23,14 +23,12 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
-	"github.com/sourcegraph/sourcegraph/internal/actor"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/cloneurls"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/database"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
-	"github.com/sourcegraph/sourcegraph/internal/honey"
 	"github.com/sourcegraph/sourcegraph/internal/httpcli"
 	"github.com/sourcegraph/sourcegraph/internal/repos"
 	sgtrace "github.com/sourcegraph/sourcegraph/internal/trace"
@@ -54,70 +52,12 @@ var (
 	cf = httpcli.NewExternalHTTPClientFactory()
 )
 
-var traceGraphQLQueriesSample = func() int {
-	rate, _ := strconv.Atoi(os.Getenv("TRACE_GRAPHQL_QUERIES_SAMPLE"))
-	return rate
-}()
-
-type honeycombTracer struct{}
-
-func (h honeycombTracer) TraceQuery(ctx context.Context, queryString string, operationName string, variables map[string]interface{}, varTypes map[string]*introspection.Type) (context.Context, trace.TraceQueryFinishFunc) {
-	start := time.Now()
-	return ctx, func(queryErrors []*gqlerrors.QueryError) {
-		if !honey.Enabled() || traceGraphQLQueriesSample <= 0 {
-			return
-		}
-
-		a := actor.FromContext(ctx)
-		anonymous := !a.IsAuthenticated()
-		uid := a.UIDString()
-		if anonymous {
-			uid = sgtrace.AnonymousUID(ctx)
-		}
-
-		ev := honey.Event("graphql-cost")
-		ev.SampleRate = uint(traceGraphQLQueriesSample)
-		ev.AddField("query", queryString)
-		ev.AddField("anonymous", anonymous)
-		ev.AddField("uid", uid)
-		ev.AddField("operationName", operationName)
-		ev.AddField("isInternal", sgtrace.IsInternalRequest(ctx))
-		d := time.Since(start)
-		ev.AddField("durationMicroseconds", d.Microseconds()) // Deprecated
-		ev.AddField("durationSeconds", d.Seconds())           // Deprecated
-		// Honeycomb has built in support for latency if you use milliseconds. We
-		// multiply seconds by 1000 here instead of using d.Milliseconds() so that we
-		// don't truncate durations of less than 1 millisecond.
-		ev.AddField("durationMilliseconds", d.Seconds()*1000)
-		ev.AddField("hasQueryErrors", len(queryErrors) > 0)
-		ev.AddField("requestName", sgtrace.GraphQLRequestName(ctx))
-		ev.AddField("requestSource", sgtrace.RequestSource(ctx))
-
-		cost, err := estimateQueryCost(queryString)
-		if err != nil {
-			log15.Warn("estimating GraphQL cost", "error", err)
-			ev.AddField("hasCostError", true)
-			ev.AddField("costError", err.Error())
-		} else {
-			ev.AddField("hasCostError", false)
-			ev.AddField("cost", cost)
-			ev.AddField("costVersion", costEstimateVersion)
-		}
-
-		_ = ev.Send()
-	}
-}
-
-func (h honeycombTracer) TraceField(ctx context.Context, label, typeName, fieldName string, trivial bool, args map[string]interface{}) (context.Context, trace.TraceFieldFinishFunc) {
-	// We don't need to trace fields in honeycomb
-	return ctx, func(queryError *gqlerrors.QueryError) {}
-}
-
 type prometheusTracer struct {
+	db dbutil.DB
 	trace.OpenTracingTracer
 }
 
-func (prometheusTracer) TraceQuery(ctx context.Context, queryString string, operationName string, variables map[string]interface{}, varTypes map[string]*introspection.Type) (context.Context, trace.TraceQueryFinishFunc) {
+func (t *prometheusTracer) TraceQuery(ctx context.Context, queryString string, operationName string, variables map[string]interface{}, varTypes map[string]*introspection.Type) (context.Context, trace.TraceQueryFinishFunc) {
 	start := time.Now()
 	var finish trace.TraceQueryFinishFunc
 	if ot.ShouldTrace(ctx) {
@@ -130,7 +70,7 @@ func (prometheusTracer) TraceQuery(ctx context.Context, queryString string, oper
 
 	// Note: We don't care about the error here, we just extract the username if
 	// we get a non-nil user object.
-	currentUser, _ := CurrentUser(ctx)
+	currentUser, _ := CurrentUser(ctx, t.db)
 	var currentUserName string
 	if currentUser != nil {
 		currentUserName = currentUser.Username()
@@ -399,7 +339,8 @@ func prometheusGraphQLRequestName(requestName string) string {
 
 func NewSchema(db dbutil.DB, campaigns CampaignsResolver, codeIntel CodeIntelResolver, insights InsightsResolver, authz AuthzResolver, codeMonitors CodeMonitorsResolver, license LicenseResolver) (*graphql.Schema, error) {
 	resolver := &schemaResolver{
-		db:                db,
+		db: db,
+
 		CampaignsResolver: defaultCampaignsResolver{},
 		AuthzResolver:     defaultAuthzResolver{},
 		CodeIntelResolver: defaultCodeIntelResolver{},
@@ -433,8 +374,7 @@ func NewSchema(db dbutil.DB, campaigns CampaignsResolver, codeIntel CodeIntelRes
 	return graphql.ParseSchema(
 		Schema,
 		resolver,
-		graphql.Tracer(prometheusTracer{}),
-		graphql.Tracer(honeycombTracer{}),
+		graphql.Tracer(&prometheusTracer{db: db}),
 		graphql.UseStringDescriptions(),
 	)
 }
@@ -621,6 +561,11 @@ func (r *NodeResolver) ToLSIFIndex() (LSIFIndexResolver, bool) {
 	return n, ok
 }
 
+func (r *NodeResolver) ToOutOfBandMigration() (*outOfBandMigrationResolver, bool) {
+	n, ok := r.Node.(*outOfBandMigrationResolver)
+	return n, ok
+}
+
 // schemaResolver handles all GraphQL queries for Sourcegraph. To do this, it
 // uses subresolvers which are globals. Enterprise-only resolvers are assigned
 // to a field of EnterpriseResolvers.
@@ -654,7 +599,7 @@ var EnterpriseResolvers = struct {
 
 // DEPRECATED
 func (r *schemaResolver) Root() *schemaResolver {
-	return &schemaResolver{}
+	return &schemaResolver{db: r.db}
 }
 
 func (r *schemaResolver) Node(ctx context.Context, args *struct{ ID graphql.ID }) (*NodeResolver, error) {
@@ -671,7 +616,7 @@ func (r *schemaResolver) Node(ctx context.Context, args *struct{ ID graphql.ID }
 func (r *schemaResolver) nodeByID(ctx context.Context, id graphql.ID) (Node, error) {
 	switch relay.UnmarshalKind(id) {
 	case "AccessToken":
-		return accessTokenByID(ctx, id)
+		return accessTokenByID(ctx, r.db, id)
 	case "Campaign":
 		return r.CampaignByID(ctx, id)
 	case "CampaignSpec":
@@ -684,42 +629,44 @@ func (r *schemaResolver) nodeByID(ctx context.Context, id graphql.ID) (Node, err
 		return r.CampaignsCredentialByID(ctx, id)
 	case "ProductLicense":
 		if f := ProductLicenseByID; f != nil {
-			return f(ctx, id)
+			return f(ctx, r.db, id)
 		}
 		return nil, errors.New("not implemented")
 	case "ProductSubscription":
 		if f := ProductSubscriptionByID; f != nil {
-			return f(ctx, id)
+			return f(ctx, r.db, id)
 		}
 		return nil, errors.New("not implemented")
 	case "ExternalAccount":
-		return externalAccountByID(ctx, id)
+		return externalAccountByID(ctx, r.db, id)
 	case externalServiceIDKind:
-		return externalServiceByID(ctx, id)
+		return externalServiceByID(ctx, r.db, id)
 	case "GitRef":
-		return gitRefByID(ctx, id)
+		return r.gitRefByID(ctx, id)
 	case "Repository":
-		return repositoryByID(ctx, id)
+		return r.repositoryByID(ctx, id)
 	case "User":
-		return UserByID(ctx, id)
+		return UserByID(ctx, r.db, id)
 	case "Org":
-		return OrgByID(ctx, id)
+		return OrgByID(ctx, r.db, id)
 	case "OrganizationInvitation":
-		return orgInvitationByID(ctx, id)
+		return orgInvitationByID(ctx, r.db, id)
 	case "GitCommit":
-		return gitCommitByID(ctx, id)
+		return r.gitCommitByID(ctx, id)
 	case "RegistryExtension":
-		return RegistryExtensionByID(ctx, id)
+		return RegistryExtensionByID(ctx, r.db, id)
 	case "SavedSearch":
-		return savedSearchByID(ctx, id)
+		return r.savedSearchByID(ctx, id)
 	case "Site":
-		return siteByGQLID(ctx, id)
+		return r.siteByGQLID(ctx, id)
 	case "LSIFUpload":
 		return r.LSIFUploadByID(ctx, id)
 	case "LSIFIndex":
 		return r.LSIFIndexByID(ctx, id)
 	case "CodeMonitor":
 		return r.MonitorByID(ctx, id)
+	case "OutOfBandMigration":
+		return r.OutOfBandMigrationByID(ctx, id)
 	default:
 		return nil, errors.New("invalid id")
 	}
@@ -802,7 +749,7 @@ func (r *schemaResolver) RepositoryRedirect(ctx context.Context, args *struct {
 		}
 		return nil, err
 	}
-	return &repositoryRedirect{repo: NewRepositoryResolver(repo)}, nil
+	return &repositoryRedirect{repo: NewRepositoryResolver(r.db, repo)}, nil
 }
 
 func (r *schemaResolver) PhabricatorRepo(ctx context.Context, args *struct {
@@ -814,7 +761,7 @@ func (r *schemaResolver) PhabricatorRepo(ctx context.Context, args *struct {
 		args.URI = args.Name
 	}
 
-	repo, err := database.GlobalPhabricator.GetByName(ctx, api.RepoName(*args.URI))
+	repo, err := database.Phabricator(r.db).GetByName(ctx, api.RepoName(*args.URI))
 	if err != nil {
 		return nil, err
 	}
@@ -822,7 +769,7 @@ func (r *schemaResolver) PhabricatorRepo(ctx context.Context, args *struct {
 }
 
 func (r *schemaResolver) CurrentUser(ctx context.Context) (*UserResolver, error) {
-	return CurrentUser(ctx)
+	return CurrentUser(ctx, r.db)
 }
 
 func (r *schemaResolver) AffiliatedRepositories(ctx context.Context, args *struct {
@@ -851,6 +798,7 @@ func (r *schemaResolver) AffiliatedRepositories(ctx context.Context, args *struc
 	}
 
 	return &codeHostRepositoryConnectionResolver{
+		db:       r.db,
 		userID:   userID,
 		codeHost: codeHost,
 		query:    query,
@@ -865,6 +813,7 @@ type codeHostRepositoryConnectionResolver struct {
 	once  sync.Once
 	nodes []*codeHostRepositoryResolver
 	err   error
+	db    dbutil.DB
 }
 
 func (r *codeHostRepositoryConnectionResolver) Nodes(ctx context.Context) ([]*codeHostRepositoryResolver, error) {
@@ -947,6 +896,7 @@ func (r *codeHostRepositoryConnectionResolver) Nodes(ctx context.Context) ([]*co
 					continue
 				}
 				r.nodes = append(r.nodes, &codeHostRepositoryResolver{
+					db:       r.db,
 					codeHost: svcsByID[repo.CodeHostID],
 					repo:     &repo,
 				})
@@ -962,6 +912,7 @@ func (r *codeHostRepositoryConnectionResolver) Nodes(ctx context.Context) ([]*co
 type codeHostRepositoryResolver struct {
 	repo     *types.CodeHostRepository
 	codeHost *types.ExternalService
+	db       dbutil.DB
 }
 
 func (r *codeHostRepositoryResolver) Name() string {
@@ -974,6 +925,7 @@ func (r *codeHostRepositoryResolver) Private() bool {
 
 func (r *codeHostRepositoryResolver) CodeHost(ctx context.Context) *externalServiceResolver {
 	return &externalServiceResolver{
+		db:              r.db,
 		externalService: r.codeHost,
 	}
 }

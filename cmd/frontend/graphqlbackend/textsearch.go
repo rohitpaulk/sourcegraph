@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/search/streaming"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 
@@ -35,17 +36,37 @@ const maxUnindexedRepoRevSearchesPerQuery = 200
 var textSearchLimiter = mutablelimiter.New(32)
 
 type FileMatch struct {
-	JPath        string       `json:"Path"`
-	JLineMatches []*lineMatch `json:"LineMatches"`
-	JLimitHit    bool         `json:"LimitHit"`
-	symbols      []*searchSymbolResult
-	uri          string
-	Repo         *types.RepoName
-	CommitID     api.CommitID
+	Path        string
+	LineMatches []*LineMatch
+	LimitHit    bool
+
+	Symbols  []*SearchSymbolResult `json:"-"`
+	uri      string                `json:"-"`
+	Repo     *types.RepoName       `json:"-"`
+	CommitID api.CommitID          `json:"-"`
 	// InputRev is the Git revspec that the user originally requested to search. It is used to
 	// preserve the original revision specifier from the user instead of navigating them to the
 	// absolute commit ID when they select a result.
-	InputRev *string
+	InputRev *string `json:"-"`
+}
+
+func (fm *FileMatch) ResultCount() int {
+	rc := len(fm.Symbols)
+	for _, m := range fm.LineMatches {
+		rc += len(m.OffsetAndLengths)
+	}
+	if rc == 0 {
+		return 1 // 1 to count "empty" results like type:path results
+	}
+	return rc
+}
+
+// appendMatches appends the line matches from src as well as updating match
+// counts and limit.
+func (fm *FileMatch) appendMatches(src *FileMatch) {
+	fm.LineMatches = append(fm.LineMatches, src.LineMatches...)
+	fm.Symbols = append(fm.Symbols, src.Symbols...)
+	fm.LimitHit = fm.LimitHit || src.LimitHit
 }
 
 // FileMatchResolver is a resolver for the GraphQL type `FileMatch`
@@ -53,6 +74,7 @@ type FileMatchResolver struct {
 	FileMatch
 
 	RepoResolver *RepositoryResolver
+	db           dbutil.DB
 }
 
 func (fm *FileMatchResolver) Equal(other *FileMatchResolver) bool {
@@ -68,12 +90,18 @@ func (fm *FileMatchResolver) File() *GitTreeEntryResolver {
 	// (which would make it slow). This GitCommitResolver will return empty
 	// values for all other fields.
 	return &GitTreeEntryResolver{
-		commit: &GitCommitResolver{
-			repoResolver: fm.RepoResolver,
-			oid:          GitObjectID(fm.CommitID),
-			inputRev:     fm.InputRev,
-		},
-		stat: CreateFileInfo(fm.JPath, false),
+		db:     fm.db,
+		commit: fm.Commit(),
+		stat:   CreateFileInfo(fm.Path, false),
+	}
+}
+
+func (fm *FileMatchResolver) Commit() *GitCommitResolver {
+	return &GitCommitResolver{
+		db:           fm.db,
+		repoResolver: fm.RepoResolver,
+		oid:          GitObjectID(fm.CommitID),
+		inputRev:     fm.InputRev,
 	}
 }
 
@@ -94,24 +122,25 @@ func (fm *FileMatchResolver) Resource() string {
 	return fm.uri
 }
 
-func (fm *FileMatchResolver) Symbols() []*symbolResolver {
-	symbols := make([]*symbolResolver, len(fm.symbols))
-	for i, s := range fm.symbols {
-		symbols[i] = toSymbolResolver(s.symbol, s.baseURI, s.lang, s.commit)
+func (fm *FileMatchResolver) Symbols() []symbolResolver {
+	commit := fm.Commit()
+	symbols := make([]symbolResolver, len(fm.FileMatch.Symbols))
+	for i, s := range fm.FileMatch.Symbols {
+		symbols[i] = toSymbolResolver(fm.db, commit, s)
 	}
 	return symbols
 }
 
 func (fm *FileMatchResolver) LineMatches() []lineMatchResolver {
-	r := make([]lineMatchResolver, 0, len(fm.JLineMatches))
-	for _, lm := range fm.JLineMatches {
+	r := make([]lineMatchResolver, 0, len(fm.FileMatch.LineMatches))
+	for _, lm := range fm.FileMatch.LineMatches {
 		r = append(r, lineMatchResolver{lm})
 	}
 	return r
 }
 
 func (fm *FileMatchResolver) LimitHit() bool {
-	return fm.JLimitHit
+	return fm.FileMatch.LimitHit
 }
 
 func (fm *FileMatchResolver) ToRepository() (*RepositoryResolver, bool) { return nil, false }
@@ -123,26 +152,17 @@ func (fm *FileMatchResolver) ToCommitSearchResult() (*CommitSearchResultResolver
 // path returns the path in repository for the file. This isn't directly
 // exposed in the GraphQL API (we expose a URI), but is used a lot internally.
 func (fm *FileMatchResolver) path() string {
-	return fm.JPath
+	return fm.Path
 }
 
 // appendMatches appends the line matches from src as well as updating match
 // counts and limit.
 func (fm *FileMatchResolver) appendMatches(src *FileMatchResolver) {
-	fm.JLineMatches = append(fm.JLineMatches, src.JLineMatches...)
-	fm.symbols = append(fm.symbols, src.symbols...)
-	fm.JLimitHit = fm.JLimitHit || src.JLimitHit
+	fm.FileMatch.appendMatches(&src.FileMatch)
 }
 
 func (fm *FileMatchResolver) ResultCount() int32 {
-	rc := len(fm.symbols)
-	for _, m := range fm.JLineMatches {
-		rc += len(m.OffsetAndLengths)
-	}
-	if rc == 0 {
-		return 1 // 1 to count "empty" results like type:path results
-	}
-	return int32(rc)
+	return int32(fm.FileMatch.ResultCount())
 }
 
 func (fm *FileMatchResolver) Select(t filter.SelectPath) SearchResultResolver {
@@ -150,20 +170,20 @@ func (fm *FileMatchResolver) Select(t filter.SelectPath) SearchResultResolver {
 	case filter.Repository:
 		return fm.Repository()
 	case filter.File:
-		fm.JLineMatches = nil
-		fm.symbols = nil
+		fm.FileMatch.LineMatches = nil
+		fm.FileMatch.Symbols = nil
 		return fm
 	case filter.Symbol:
 		// Only return file match if symbols exist
-		if len(fm.symbols) > 0 {
-			fm.JLineMatches = nil
+		if len(fm.FileMatch.Symbols) > 0 {
+			fm.FileMatch.LineMatches = nil
 			return fm
 		}
 		return nil
 	case filter.Content:
 		// Only return file match if line matches exist
-		if len(fm.JLineMatches) > 0 {
-			fm.symbols = nil
+		if len(fm.FileMatch.LineMatches) > 0 {
+			fm.FileMatch.Symbols = nil
 			return fm
 		}
 		return nil
@@ -173,8 +193,8 @@ func (fm *FileMatchResolver) Select(t filter.SelectPath) SearchResultResolver {
 	return nil
 }
 
-// lineMatch is the struct used by vscode to receive search results for a line
-type lineMatch struct {
+// LineMatch is the struct used by vscode to receive search results for a line
+type LineMatch struct {
 	Preview          string
 	OffsetAndLengths [][2]int32
 	LineNumber       int32
@@ -182,32 +202,32 @@ type lineMatch struct {
 }
 
 type lineMatchResolver struct {
-	*lineMatch
+	*LineMatch
 }
 
 func (lm lineMatchResolver) Preview() string {
-	return lm.lineMatch.Preview
+	return lm.LineMatch.Preview
 }
 
 func (lm lineMatchResolver) LineNumber() int32 {
-	return lm.lineMatch.LineNumber
+	return lm.LineMatch.LineNumber
 }
 
 func (lm lineMatchResolver) OffsetAndLengths() [][]int32 {
-	r := make([][]int32, len(lm.lineMatch.OffsetAndLengths))
-	for i := range lm.lineMatch.OffsetAndLengths {
-		r[i] = lm.lineMatch.OffsetAndLengths[i][:]
+	r := make([][]int32, len(lm.LineMatch.OffsetAndLengths))
+	for i := range lm.LineMatch.OffsetAndLengths {
+		r[i] = lm.LineMatch.OffsetAndLengths[i][:]
 	}
 	return r
 }
 
 func (lm lineMatchResolver) LimitHit() bool {
-	return lm.lineMatch.LimitHit
+	return lm.LineMatch.LimitHit
 }
 
 var mockSearchFilesInRepo func(ctx context.Context, repo *types.RepoName, gitserverRepo api.RepoName, rev string, info *search.TextPatternInfo, fetchTimeout time.Duration) (matches []*FileMatchResolver, limitHit bool, err error)
 
-func searchFilesInRepo(ctx context.Context, searcherURLs *endpoint.Map, repo *types.RepoName, gitserverRepo api.RepoName, rev string, index bool, info *search.TextPatternInfo, fetchTimeout time.Duration) ([]*FileMatchResolver, bool, error) {
+func searchFilesInRepo(ctx context.Context, db dbutil.DB, searcherURLs *endpoint.Map, repo *types.RepoName, gitserverRepo api.RepoName, rev string, index bool, info *search.TextPatternInfo, fetchTimeout time.Duration) ([]*FileMatchResolver, bool, error) {
 	if mockSearchFilesInRepo != nil {
 		return mockSearchFilesInRepo(ctx, repo, gitserverRepo, rev, info, fetchTimeout)
 	}
@@ -245,16 +265,16 @@ func searchFilesInRepo(ctx context.Context, searcherURLs *endpoint.Map, repo *ty
 	}
 
 	workspace := fileMatchURI(repo.Name, rev, "")
-	repoResolver := NewRepositoryResolver(repo.ToRepo())
+	repoResolver := NewRepositoryResolver(db, repo.ToRepo())
 	resolvers := make([]*FileMatchResolver, 0, len(matches))
 	for _, fm := range matches {
-		lineMatches := make([]*lineMatch, 0, len(fm.LineMatches))
+		lineMatches := make([]*LineMatch, 0, len(fm.LineMatches))
 		for _, lm := range fm.LineMatches {
 			ranges := make([][2]int32, 0, len(lm.OffsetAndLengths))
 			for _, ol := range lm.OffsetAndLengths {
 				ranges = append(ranges, [2]int32{int32(ol[0]), int32(ol[1])})
 			}
-			lineMatches = append(lineMatches, &lineMatch{
+			lineMatches = append(lineMatches, &LineMatch{
 				Preview:          lm.Preview,
 				OffsetAndLengths: ranges,
 				LineNumber:       int32(lm.LineNumber),
@@ -263,14 +283,15 @@ func searchFilesInRepo(ctx context.Context, searcherURLs *endpoint.Map, repo *ty
 		}
 
 		resolvers = append(resolvers, &FileMatchResolver{
+			db: db,
 			FileMatch: FileMatch{
-				JPath:        fm.Path,
-				JLineMatches: lineMatches,
-				JLimitHit:    fm.LimitHit,
-				Repo:         repo,
-				uri:          workspace + fm.Path,
-				CommitID:     commit,
-				InputRev:     &rev,
+				Path:        fm.Path,
+				LineMatches: lineMatches,
+				LimitHit:    fm.LimitHit,
+				Repo:        repo,
+				uri:         workspace + fm.Path,
+				CommitID:    commit,
+				InputRev:    &rev,
 			},
 			RepoResolver: repoResolver,
 		})
@@ -358,9 +379,9 @@ func searchResultsToFileMatchResults(results []SearchResultResolver) ([]*FileMat
 
 // searchFilesInRepoBatch is a convenience function around searchFilesInRepos
 // which collects the results from the stream.
-func searchFilesInReposBatch(ctx context.Context, args *search.TextParameters) ([]*FileMatchResolver, streaming.Stats, error) {
-	results, stats, err := collectStream(func(stream Streamer) error {
-		return searchFilesInRepos(ctx, args, stream)
+func searchFilesInReposBatch(ctx context.Context, db dbutil.DB, args *search.TextParameters) ([]*FileMatchResolver, streaming.Stats, error) {
+	results, stats, err := collectStream(func(stream Sender) error {
+		return searchFilesInRepos(ctx, db, args, stream)
 	})
 	fms, fmErr := searchResultsToFileMatchResults(results)
 	if fmErr != nil && err == nil {
@@ -370,7 +391,7 @@ func searchFilesInReposBatch(ctx context.Context, args *search.TextParameters) (
 }
 
 // searchFilesInRepos searches a set of repos for a pattern.
-func searchFilesInRepos(ctx context.Context, args *search.TextParameters, stream Streamer) (err error) {
+func searchFilesInRepos(ctx context.Context, db dbutil.DB, args *search.TextParameters, stream Sender) (err error) {
 	if mockSearchFilesInRepos != nil {
 		results, mockStats, err := mockSearchFilesInRepos(args)
 		stream.Send(SearchEvent{
@@ -411,7 +432,7 @@ func searchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 			repos: &indexedRepoRevs{},
 		}
 	} else {
-		indexed, err = newIndexedSearchRequest(ctx, args, indexedTyp, stream)
+		indexed, err = newIndexedSearchRequest(ctx, db, args, indexedTyp, stream)
 		if err != nil {
 			return err
 		}
@@ -442,15 +463,15 @@ func searchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 				repos = append(repos, repo)
 			}
 
-			return callSearcherOverRepos(ctx, args, stream, repos, nil, true)
+			return callSearcherOverRepos(ctx, db, args, stream, repos, nil, true)
 		})
 
 		g.Go(func() error {
-			return callSearcherOverRepos(ctx, args, stream, indexed.Unindexed, nil, false)
+			return callSearcherOverRepos(ctx, db, args, stream, indexed.Unindexed, nil, false)
 		})
 	} else if isStructuralSearch {
 		g.Go(func() error {
-			return structuralSearchBackcompat(ctx, args, stream, indexed)
+			return structuralSearchBackcompat(ctx, db, args, stream, indexed)
 		})
 	}
 
@@ -459,7 +480,7 @@ func searchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 	// - unindexed search of negated content
 	if !args.PatternInfo.IsStructuralPat {
 		g.Go(func() error {
-			return callSearcherOverRepos(ctx, args, stream, indexed.Unindexed, nil, false)
+			return callSearcherOverRepos(ctx, db, args, stream, indexed.Unindexed, nil, false)
 		})
 	}
 
@@ -474,8 +495,9 @@ func searchFilesInRepos(ctx context.Context, args *search.TextParameters, stream
 // search.
 func callSearcherOverRepos(
 	ctx context.Context,
+	db dbutil.DB,
 	args *search.TextParameters,
-	stream Streamer,
+	stream Sender,
 	searcherRepos []*search.RepositoryRevisions,
 	searcherReposFilteredFiles map[string][]string,
 	index bool,
@@ -557,7 +579,7 @@ func callSearcherOverRepos(
 					ctx, done := limitCtx, limitDone
 					defer done()
 
-					matches, repoLimitHit, err := searchFilesInRepo(ctx, args.SearcherURLs, repoRev.Repo, repoRev.GitserverRepo(), repoRev.RevSpecs()[0], index, args.PatternInfo, fetchTimeout)
+					matches, repoLimitHit, err := searchFilesInRepo(ctx, db, args.SearcherURLs, repoRev.Repo, repoRev.GitserverRepo(), repoRev.RevSpecs()[0], index, args.PatternInfo, fetchTimeout)
 					if err != nil {
 						tr.LogFields(otlog.String("repo", string(repoRev.Repo.Name)), otlog.Error(err), otlog.Bool("timeout", errcode.IsTimeout(err)), otlog.Bool("temporary", errcode.IsTemporary(err)))
 						log15.Warn("searchFilesInRepo failed", "error", err, "repo", repoRev.Repo.Name)
@@ -582,7 +604,7 @@ func callSearcherOverRepos(
 // structuralSearchBackcompat is the old way we did structural search. It runs
 // a query through zoekt first to get back a list of filepaths to search. Then
 // calls searcher limiting it to just those files.
-func structuralSearchBackcompat(ctx context.Context, args *search.TextParameters, stream Streamer, indexed *indexedSearchRequest) (err error) {
+func structuralSearchBackcompat(ctx context.Context, db dbutil.DB, args *search.TextParameters, stream Sender, indexed *indexedSearchRequest) (err error) {
 	tr, ctx := trace.New(ctx, "structuralSearchBackcompt", "")
 	defer func() {
 		tr.SetError(err)
@@ -616,7 +638,7 @@ func structuralSearchBackcompat(ctx context.Context, args *search.TextParameters
 					return errors.New("structual search: Events from indexed.Search could not be converted to FileMatch")
 				}
 				name := string(fm.Repo.Name)
-				partition[name] = append(partition[name], fm.JPath)
+				partition[name] = append(partition[name], fm.Path)
 			}
 
 			// Filter Zoekt repos that didn't contain matches
@@ -626,7 +648,7 @@ func structuralSearchBackcompat(ctx context.Context, args *search.TextParameters
 				}
 			}
 
-			return callSearcherOverRepos(ctx, args, stream, repos, partition, true)
+			return callSearcherOverRepos(ctx, db, args, stream, repos, partition, true)
 		})
 	}))
 

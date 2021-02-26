@@ -14,8 +14,8 @@ import (
 	"github.com/sourcegraph/go-lsp"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
-	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/gituri"
 	"github.com/sourcegraph/sourcegraph/internal/goroutine"
 	"github.com/sourcegraph/sourcegraph/internal/search"
@@ -26,15 +26,14 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/vcs/git"
 )
 
-// searchSymbolResult is a result from symbol search.
-type searchSymbolResult struct {
+// SearchSymbolResult is a result from symbol search.
+type SearchSymbolResult struct {
 	symbol  protocol.Symbol
 	baseURI *gituri.URI
 	lang    string
-	commit  *GitCommitResolver // TODO: change to utility type we create to remove git resolvers from search.
 }
 
-func (s *searchSymbolResult) uri() *gituri.URI {
+func (s *SearchSymbolResult) uri() *gituri.URI {
 	return s.baseURI.WithFilePath(s.symbol.Path)
 }
 
@@ -44,7 +43,7 @@ var mockSearchSymbols func(ctx context.Context, args *search.TextParameters, lim
 // it can be used for both search suggestions and search results
 //
 // May return partial results and an error
-func searchSymbols(ctx context.Context, args *search.TextParameters, limit int, stream Streamer) (err error) {
+func searchSymbols(ctx context.Context, db dbutil.DB, args *search.TextParameters, limit int, stream Sender) (err error) {
 	if mockSearchSymbols != nil {
 		results, stats, err := mockSearchSymbols(ctx, args, limit)
 		stream.Send(SearchEvent{
@@ -72,7 +71,7 @@ func searchSymbols(ctx context.Context, args *search.TextParameters, limit int, 
 	ctx, stream, cancel := WithLimit(ctx, stream, limit)
 	defer cancel()
 
-	indexed, err := newIndexedSearchRequest(ctx, args, symbolRequest, stream)
+	indexed, err := newIndexedSearchRequest(ctx, db, args, symbolRequest, stream)
 	if err != nil {
 		return err
 	}
@@ -106,7 +105,7 @@ func searchSymbols(ctx context.Context, args *search.TextParameters, limit int, 
 		goroutine.Go(func() {
 			defer run.Release()
 
-			matches, err := searchSymbolsInRepo(ctx, repoRevs, args.PatternInfo, limit)
+			matches, err := searchSymbolsInRepo(ctx, db, repoRevs, args.PatternInfo, limit)
 			stats, err := handleRepoSearchResult(repoRevs, len(matches) > limit, false, err)
 			stream.Send(SearchEvent{
 				Results: fileMatchResultsToSearchResults(matches),
@@ -131,14 +130,16 @@ func limitSymbolResults(res []*FileMatchResolver, limit int) []*FileMatchResolve
 	res2 := make([]*FileMatchResolver, 0, len(res))
 	nsym := 0
 	for _, r := range res {
-		r2 := *r
-		if nsym+len(r.symbols) > limit {
-			r2.symbols = r2.symbols[:limit-nsym]
+		symbols := r.FileMatch.Symbols
+		if nsym+len(symbols) > limit {
+			symbols = symbols[:limit-nsym]
 		}
-		if len(r2.symbols) > 0 {
+		if len(symbols) > 0 {
+			r2 := *r
+			r2.FileMatch.Symbols = symbols
 			res2 = append(res2, &r2)
 		}
-		nsym += len(r2.symbols)
+		nsym += len(symbols)
 		if nsym >= limit {
 			return res2
 		}
@@ -150,12 +151,12 @@ func limitSymbolResults(res []*FileMatchResolver, limit int) []*FileMatchResolve
 func symbolCount(fmrs []*FileMatchResolver) int {
 	nsym := 0
 	for _, fmr := range fmrs {
-		nsym += len(fmr.symbols)
+		nsym += len(fmr.FileMatch.Symbols)
 	}
 	return nsym
 }
 
-func searchSymbolsInRepo(ctx context.Context, repoRevs *search.RepositoryRevisions, patternInfo *search.TextPatternInfo, limit int) (res []*FileMatchResolver, err error) {
+func searchSymbolsInRepo(ctx context.Context, db dbutil.DB, repoRevs *search.RepositoryRevisions, patternInfo *search.TextPatternInfo, limit int) (res []*FileMatchResolver, err error) {
 	span, ctx := ot.StartSpanFromContext(ctx, "Search symbols in repo")
 	defer func() {
 		if err != nil {
@@ -182,13 +183,7 @@ func searchSymbolsInRepo(ctx context.Context, repoRevs *search.RepositoryRevisio
 		return nil, err
 	}
 
-	repoResolver := NewRepositoryResolver(repoRevs.Repo.ToRepo())
-	commitResolver := &GitCommitResolver{
-		repoResolver: repoResolver,
-		oid:          GitObjectID(commitID),
-		inputRev:     &inputRev,
-		// NOTE: Not all fields are set, for performance.
-	}
+	repoResolver := NewRepositoryResolver(db, repoRevs.Repo.ToRepo())
 
 	symbols, err := backend.Symbols.ListTags(ctx, search.SymbolsParameters{
 		Repo:            repoRevs.Repo.Name,
@@ -205,23 +200,23 @@ func searchSymbolsInRepo(ctx context.Context, repoRevs *search.RepositoryRevisio
 	fileMatches := make([]*FileMatchResolver, 0)
 
 	for _, symbol := range symbols {
-		symbolRes := &searchSymbolResult{
+		symbolRes := &SearchSymbolResult{
 			symbol:  symbol,
 			baseURI: baseURI,
 			lang:    strings.ToLower(symbol.Language),
-			commit:  commitResolver,
 		}
-		uri := makeFileMatchURIFromSymbol(symbolRes, inputRev)
+		uri := makeFileMatchURI(repoResolver.URL(), inputRev, symbolRes.uri().Fragment)
 		if fileMatch, ok := fileMatchesByURI[uri]; ok {
-			fileMatch.symbols = append(fileMatch.symbols, symbolRes)
+			fileMatch.FileMatch.Symbols = append(fileMatch.FileMatch.Symbols, symbolRes)
 		} else {
 			fileMatch := &FileMatchResolver{
+				db: db,
 				FileMatch: FileMatch{
-					JPath:    symbolRes.symbol.Path,
-					symbols:  []*searchSymbolResult{symbolRes},
+					Path:     symbolRes.symbol.Path,
+					Symbols:  []*SearchSymbolResult{symbolRes},
 					uri:      uri,
 					Repo:     repoRevs.Repo,
-					CommitID: api.CommitID(symbolRes.commit.OID()),
+					CommitID: commitID,
 				},
 				RepoResolver: repoResolver,
 			}
@@ -232,14 +227,14 @@ func searchSymbolsInRepo(ctx context.Context, repoRevs *search.RepositoryRevisio
 	return fileMatches, err
 }
 
-// makeFileMatchURIFromSymbol makes a git://repo?rev#path URI from a symbol
+// makeFileMatchURI makes a git://repo?rev#path URI from a symbol
 // search result to use in a fileMatchResolver
-func makeFileMatchURIFromSymbol(symbolResult *searchSymbolResult, inputRev string) string {
-	uri := "git:/" + string(symbolResult.commit.Repository().URL())
+func makeFileMatchURI(repoURL, inputRev, symbolFragment string) string {
+	uri := "git:/" + repoURL
 	if inputRev != "" {
 		uri += "?" + inputRev
 	}
-	uri += "#" + symbolResult.uri().Fragment
+	uri += "#" + symbolFragment
 	return uri
 }
 

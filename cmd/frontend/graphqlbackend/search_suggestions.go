@@ -13,10 +13,13 @@ import (
 	"github.com/neelance/parallel"
 	"github.com/pkg/errors"
 	"github.com/sourcegraph/go-lsp"
+
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/database"
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
+	"github.com/sourcegraph/sourcegraph/internal/gituri"
 	"github.com/sourcegraph/sourcegraph/internal/search"
 	"github.com/sourcegraph/sourcegraph/internal/search/query"
 )
@@ -102,7 +105,7 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 			resolvers := make([]*searchSuggestionResolver, 0, len(resolved.RepoRevs))
 			for _, rev := range resolved.RepoRevs {
 				resolvers = append(resolvers, newSearchSuggestionResolver(
-					NewRepositoryResolver(rev.Repo.ToRepo()),
+					NewRepositoryResolver(r.db, rev.Repo.ToRepo()),
 					math.MaxInt32,
 				))
 			}
@@ -189,7 +192,7 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 		resolvers := make([]*searchSuggestionResolver, 0, len(inventory.Languages))
 		for _, l := range inventory.Languages {
 			resolvers = append(resolvers, newSearchSuggestionResolver(
-				&languageResolver{name: strings.ToLower(l.Name)},
+				&languageResolver{db: r.db, name: strings.ToLower(l.Name)},
 				math.MaxInt32,
 			))
 		}
@@ -216,8 +219,8 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
 
-		fileMatches, _, err := collectStream(func(stream Streamer) error {
-			return searchSymbols(ctx, &search.TextParameters{
+		fileMatches, _, err := collectStream(func(stream Sender) error {
+			return searchSymbols(ctx, r.db, &search.TextParameters{
 				PatternInfo:  p,
 				RepoPromise:  (&search.Promise{}).Resolve(resolved.RepoRevs),
 				Query:        r.Query,
@@ -235,7 +238,7 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 			if !ok {
 				continue
 			}
-			for _, sr := range fileMatch.symbols {
+			for _, sr := range fileMatch.Symbols() {
 				score := 20
 				if sr.symbol.Parent == "" {
 					score++
@@ -347,6 +350,7 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 		file     string
 		symbol   string
 		lang     string
+		uri      *gituri.URI
 	}
 	seen := make(map[key]struct{}, len(allSuggestions))
 	uniqueSuggestions := allSuggestions[:0]
@@ -367,8 +371,8 @@ func (r *searchResolver) Suggestions(ctx context.Context, args *searchSuggestion
 			// (that do specify a commit ID), because their key k (i.e., k in seen[k]) will not
 			// equal.
 			k.file = s.Path()
-		case *searchSymbolResult:
-			k.repoName = api.RepoName(s.commit.Repository().Name())
+		case symbolResolver:
+			k.uri = s.uri()
 			k.symbol = s.symbol.Name + s.symbol.Parent
 		case *languageResolver:
 			k.lang = s.name
@@ -406,6 +410,7 @@ func allEmptyStrings(ss1, ss2 []string) bool {
 }
 
 type languageResolver struct {
+	db   dbutil.DB
 	name string
 }
 

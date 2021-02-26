@@ -12,6 +12,7 @@ import (
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/envvar"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/graphqlbackend"
+	cauth "github.com/sourcegraph/sourcegraph/enterprise/internal/campaigns/auth"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/campaigns/search"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/campaigns/service"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/campaigns/store"
@@ -20,6 +21,7 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/campaigns"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/database"
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
 	"github.com/sourcegraph/sourcegraph/internal/extsvc"
 	"github.com/sourcegraph/sourcegraph/internal/extsvc/auth"
@@ -383,7 +385,7 @@ func (r *Resolver) CreateCampaignSpec(ctx context.Context, args *graphqlbackend.
 		return nil, err
 	}
 
-	if err := logCampaignSpecCreated(ctx, &opts); err != nil {
+	if err := logCampaignSpecCreated(ctx, r.store.DB(), &opts); err != nil {
 		return nil, err
 	}
 
@@ -395,7 +397,7 @@ func (r *Resolver) CreateCampaignSpec(ctx context.Context, args *graphqlbackend.
 	return specResolver, nil
 }
 
-func logCampaignSpecCreated(ctx context.Context, opts *service.CreateCampaignSpecOpts) error {
+func logCampaignSpecCreated(ctx context.Context, db dbutil.DB, opts *service.CreateCampaignSpecOpts) error {
 	// Log an analytics event when a CampaignSpec has been created.
 	// See internal/usagestats/campaigns.go.
 	actor := actor.FromContext(ctx)
@@ -410,7 +412,7 @@ func logCampaignSpecCreated(ctx context.Context, opts *service.CreateCampaignSpe
 		return err
 	}
 
-	return usagestats.LogBackendEvent(actor.UID, "CampaignSpecCreated", json.RawMessage(jsonArg))
+	return usagestats.LogBackendEvent(db, actor.UID, "CampaignSpecCreated", json.RawMessage(jsonArg))
 }
 
 func (r *Resolver) CreateChangesetSpec(ctx context.Context, args *graphqlbackend.CreateChangesetSpecArgs) (graphqlbackend.ChangesetSpecResolver, error) {
@@ -854,6 +856,11 @@ func (r *Resolver) CreateCampaignsCredential(ctx context.Context, args *graphqlb
 		return nil, ErrDuplicateCredential{}
 	}
 
+	keypair, err := cauth.GenerateRSAKey()
+	if err != nil {
+		return nil, err
+	}
+
 	var a auth.Authenticator
 	if kind == extsvc.KindBitbucketServer {
 		svc := service.New(r.store)
@@ -861,9 +868,19 @@ func (r *Resolver) CreateCampaignsCredential(ctx context.Context, args *graphqlb
 		if err != nil {
 			return nil, err
 		}
-		a = &auth.BasicAuth{Username: username, Password: args.Credential}
+		a = &auth.BasicAuthWithSSH{
+			BasicAuth:  auth.BasicAuth{Username: username, Password: args.Credential},
+			PrivateKey: keypair.PrivateKey,
+			PublicKey:  keypair.PublicKey,
+			Passphrase: keypair.Passphrase,
+		}
 	} else {
-		a = &auth.OAuthBearerToken{Token: args.Credential}
+		a = &auth.OAuthBearerTokenWithSSH{
+			OAuthBearerToken: auth.OAuthBearerToken{Token: args.Credential},
+			PrivateKey:       keypair.PrivateKey,
+			PublicKey:        keypair.PublicKey,
+			Passphrase:       keypair.Passphrase,
+		}
 	}
 
 	cred, err := r.store.UserCredentials().Create(ctx, scope, a)

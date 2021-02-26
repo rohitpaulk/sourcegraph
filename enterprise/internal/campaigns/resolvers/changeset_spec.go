@@ -76,9 +76,10 @@ func (r *changesetSpecResolver) Type() campaigns.ChangesetSpecDescriptionType {
 
 func (r *changesetSpecResolver) Description(ctx context.Context) (graphqlbackend.ChangesetDescription, error) {
 	descriptionResolver := &changesetDescriptionResolver{
-		desc: r.changesetSpec.Spec,
+		store: r.store,
+		desc:  r.changesetSpec.Spec,
 		// Note: r.repo can never be nil, because Description is a VisibleChangesetSpecResolver-only field.
-		repoResolver: graphqlbackend.NewRepositoryResolver(r.repo),
+		repoResolver: graphqlbackend.NewRepositoryResolver(r.store.DB(), r.repo),
 		diffStat:     r.changesetSpec.DiffStat(),
 	}
 
@@ -116,6 +117,7 @@ var _ graphqlbackend.ChangesetDescription = &changesetDescriptionResolver{}
 // interfaces: ExistingChangesetReferenceResolver and
 // GitBranchChangesetDescriptionResolver.
 type changesetDescriptionResolver struct {
+	store        *store.Store
 	repoResolver *graphqlbackend.RepositoryResolver
 	desc         *campaigns.ChangesetSpecDescription
 	diffStat     diff.Stat
@@ -159,13 +161,14 @@ func (r *changesetDescriptionResolver) Diff(ctx context.Context) (graphqlbackend
 	if err != nil {
 		return nil, err
 	}
-	return graphqlbackend.NewPreviewRepositoryComparisonResolver(ctx, r.repoResolver, r.desc.BaseRev, diff)
+	return graphqlbackend.NewPreviewRepositoryComparisonResolver(ctx, r.store.DB(), r.repoResolver, r.desc.BaseRev, diff)
 }
 
 func (r *changesetDescriptionResolver) Commits() []graphqlbackend.GitCommitDescriptionResolver {
 	var resolvers []graphqlbackend.GitCommitDescriptionResolver
 	for _, c := range r.desc.Commits {
 		resolvers = append(resolvers, &gitCommitDescriptionResolver{
+			store:       r.store,
 			message:     c.Message,
 			diff:        c.Diff,
 			authorName:  c.AuthorName,
@@ -178,6 +181,7 @@ func (r *changesetDescriptionResolver) Commits() []graphqlbackend.GitCommitDescr
 var _ graphqlbackend.GitCommitDescriptionResolver = &gitCommitDescriptionResolver{}
 
 type gitCommitDescriptionResolver struct {
+	store       *store.Store
 	message     string
 	diff        string
 	authorName  string
@@ -186,6 +190,7 @@ type gitCommitDescriptionResolver struct {
 
 func (r *gitCommitDescriptionResolver) Author() *graphqlbackend.PersonResolver {
 	return graphqlbackend.NewPersonResolver(
+		r.store.DB(),
 		r.authorName,
 		r.authorEmail,
 		// Try to find the corresponding Sourcegraph user.
@@ -194,10 +199,10 @@ func (r *gitCommitDescriptionResolver) Author() *graphqlbackend.PersonResolver {
 }
 func (r *gitCommitDescriptionResolver) Message() string { return r.message }
 func (r *gitCommitDescriptionResolver) Subject() string {
-	return graphqlbackend.GitCommitSubject(r.message)
+	return git.Message(r.message).Subject()
 }
 func (r *gitCommitDescriptionResolver) Body() *string {
-	body := graphqlbackend.GitCommitBody(r.message)
+	body := git.Message(r.message).Body()
 	if body == "" {
 		return nil
 	}

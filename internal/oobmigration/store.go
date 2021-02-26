@@ -20,13 +20,27 @@ type Migration struct {
 	Component      string
 	Description    string
 	Introduced     string
-	Deprecated     string
+	Deprecated     *string
 	Progress       float64
 	Created        time.Time
 	LastUpdated    *time.Time
 	NonDestructive bool
 	ApplyReverse   bool
 	Errors         []MigrationError
+}
+
+// Complete returns true if the migration has 0 un-migrated record in whichever
+// direction is indicated by the ApplyReverse flag.
+func (m Migration) Complete() bool {
+	if m.Progress == 1 && !m.ApplyReverse {
+		return true
+	}
+
+	if m.Progress == 0 && m.ApplyReverse {
+		return true
+	}
+
+	return false
 }
 
 // MigrationError pairs an error message and the time the error occurred.
@@ -51,7 +65,7 @@ func scanMigrations(rows *sql.Rows, queryErr error) (_ []Migration, err error) {
 			&value.Component,
 			&value.Description,
 			&value.Introduced,
-			&dbutil.NullString{S: &value.Deprecated},
+			&value.Deprecated,
 			&value.Progress,
 			&value.Created,
 			&value.LastUpdated,

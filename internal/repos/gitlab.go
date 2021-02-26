@@ -130,7 +130,8 @@ func newGitLabSource(svc *types.ExternalService, c *schema.GitLabConnection, cf 
 
 func (s GitLabSource) WithAuthenticator(a auth.Authenticator) (Source, error) {
 	switch a.(type) {
-	case *auth.OAuthBearerToken:
+	case *auth.OAuthBearerToken,
+		*auth.OAuthBearerTokenWithSSH:
 		break
 
 	default:
@@ -461,7 +462,7 @@ func (s *GitLabSource) LoadChangeset(ctx context.Context, cs *Changeset) error {
 
 	mr, err := s.client.GetMergeRequest(ctx, project, gitlab.ID(iid))
 	if err != nil {
-		if gitlab.IsNotFound(err) {
+		if errors.Cause(err) == gitlab.ErrMergeRequestNotFound {
 			return ChangesetNotFoundError{Changeset: cs}
 		}
 		return errors.Wrapf(err, "retrieving merge request %d", iid)

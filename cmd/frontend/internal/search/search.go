@@ -11,18 +11,21 @@ import (
 	"time"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/graphqlbackend"
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 )
 
 // StreamHandler is an http handler which streams back search results.
-func StreamHandler() http.Handler {
+func StreamHandler(db dbutil.DB) http.Handler {
 	return &streamHandler{
+		db:                db,
 		newSearchResolver: defaultNewSearchResolver,
 	}
 }
 
 type streamHandler struct {
-	newSearchResolver func(context.Context, *graphqlbackend.SearchArgs) (searchResolver, error)
+	db                dbutil.DB
+	newSearchResolver func(context.Context, dbutil.DB, *graphqlbackend.SearchArgs) (searchResolver, error)
 }
 
 func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +140,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					}
 					matchesBuf = append(matchesBuf, fromSymbolMatch(fm, symbols))
 				} else {
-					matchesBuf = append(matchesBuf, fromFileMatch(fm))
+					matchesBuf = append(matchesBuf, fromFileMatch(&fm.FileMatch))
 				}
 			}
 			if repo, ok := result.ToRepository(); ok {
@@ -181,7 +184,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resultsResolver, err := results()
 	if err != nil {
-		_ = eventWriter.Event("error", err.Error())
+		_ = eventWriter.Event("error", eventError{Message: err.Error()})
 		return
 	}
 
@@ -211,7 +214,7 @@ func (h *streamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *streamHandler) startSearch(ctx context.Context, a *args) (events <-chan graphqlbackend.SearchEvent, inputs graphqlbackend.SearchInputs, results func() (*graphqlbackend.SearchResultsResolver, error)) {
 	eventsC := make(chan graphqlbackend.SearchEvent)
 
-	search, err := h.newSearchResolver(ctx, &graphqlbackend.SearchArgs{
+	search, err := h.newSearchResolver(ctx, h.db, &graphqlbackend.SearchArgs{
 		Query:          a.Query,
 		Version:        a.Version,
 		PatternType:    strPtr(a.PatternType),
@@ -252,8 +255,8 @@ type searchResolver interface {
 	Inputs() graphqlbackend.SearchInputs
 }
 
-func defaultNewSearchResolver(ctx context.Context, args *graphqlbackend.SearchArgs) (searchResolver, error) {
-	return graphqlbackend.NewSearchImplementer(ctx, args)
+func defaultNewSearchResolver(ctx context.Context, db dbutil.DB, args *graphqlbackend.SearchArgs) (searchResolver, error) {
+	return graphqlbackend.NewSearchImplementer(ctx, db, args)
 }
 
 type args struct {
@@ -300,9 +303,9 @@ func fromStrPtr(s *string) string {
 	return *s
 }
 
-func fromFileMatch(fm *graphqlbackend.FileMatchResolver) eventFileMatch {
-	lineMatches := make([]eventLineMatch, 0, len(fm.JLineMatches))
-	for _, lm := range fm.JLineMatches {
+func fromFileMatch(fm *graphqlbackend.FileMatch) eventFileMatch {
+	lineMatches := make([]eventLineMatch, 0, len(fm.LineMatches))
+	for _, lm := range fm.LineMatches {
 		lineMatches = append(lineMatches, eventLineMatch{
 			Line:             lm.Preview,
 			LineNumber:       lm.LineNumber,
@@ -317,7 +320,7 @@ func fromFileMatch(fm *graphqlbackend.FileMatchResolver) eventFileMatch {
 
 	return eventFileMatch{
 		Type:        fileMatch,
-		Path:        fm.JPath,
+		Path:        fm.Path,
 		Repository:  string(fm.Repo.Name),
 		Branches:    branches,
 		Version:     string(fm.CommitID),
@@ -333,7 +336,7 @@ func fromSymbolMatch(fm *graphqlbackend.FileMatchResolver, symbols []symbol) eve
 
 	return eventSymbolMatch{
 		Type:       symbolMatch,
-		Path:       fm.JPath,
+		Path:       fm.Path,
 		Repository: string(fm.Repo.Name),
 		Branches:   branches,
 		Version:    string(fm.CommitID),
@@ -465,4 +468,10 @@ type eventAlert struct {
 type proposedQuery struct {
 	Description string `json:"description,omitempty"`
 	Query       string `json:"query"`
+}
+
+// eventError emulates a JavaScript error with a message property
+// as is returned when the search encounters an error.
+type eventError struct {
+	Message string `json:"message"`
 }

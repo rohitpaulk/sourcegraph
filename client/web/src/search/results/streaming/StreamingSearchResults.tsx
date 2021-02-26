@@ -1,30 +1,20 @@
-import { LoadingSpinner } from '@sourcegraph/react-loading-spinner'
 import * as H from 'history'
-import FileIcon from 'mdi-react/FileIcon'
-import SearchIcon from 'mdi-react/SearchIcon'
-import SourceRepositoryIcon from 'mdi-react/SourceRepositoryIcon'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Observable } from 'rxjs'
+import { debounceTime } from 'rxjs/operators'
 import { FetchFileParameters } from '../../../../../shared/src/components/CodeExcerpt'
-import { FileMatch } from '../../../../../shared/src/components/FileMatch'
-import { VirtualList } from '../../../../../shared/src/components/VirtualList'
 import { ExtensionsControllerProps } from '../../../../../shared/src/extensions/controller'
 import { SearchPatternType } from '../../../../../shared/src/graphql-operations'
-import * as GQL from '../../../../../shared/src/graphql/schema'
 import { PlatformContextProps } from '../../../../../shared/src/platform/context'
 import { SettingsCascadeProps } from '../../../../../shared/src/settings/settings'
 import { TelemetryProps } from '../../../../../shared/src/telemetry/telemetryService'
 import { ThemeProps } from '../../../../../shared/src/theme'
 import { asError } from '../../../../../shared/src/util/errors'
-import { isDefined } from '../../../../../shared/src/util/types'
 import { useObservable } from '../../../../../shared/src/util/useObservable'
 import { AuthenticatedUser } from '../../../auth'
-import { ErrorAlert } from '../../../components/alerts'
 import { PageTitle } from '../../../components/PageTitle'
-import { SearchResult } from '../../../components/SearchResult'
 import { CodeMonitoringProps } from '../../../enterprise/code-monitoring'
 import { SavedSearchModal } from '../../../savedSearches/SavedSearchModal'
-import { eventLogger } from '../../../tracking/eventLogger'
 import { QueryState, submitSearch } from '../../helpers'
 import { queryTelemetryData } from '../../queryTelemetry'
 import { SearchAlert } from '../SearchAlert'
@@ -43,6 +33,7 @@ import {
     MutableVersionContextProps,
     SearchContextProps,
 } from '../..'
+import { StreamingSearchResultsList } from './StreamingSearchResultsList'
 
 export interface StreamingSearchResultsProps
     extends SearchStreamingProps,
@@ -64,9 +55,6 @@ export interface StreamingSearchResultsProps
 
     fetchHighlightedFileLineRanges: (parameters: FetchFileParameters, force?: boolean) => Observable<string[][]>
 }
-
-const initialItemsToShow = 15
-const incrementalItemsToShow = 10
 
 export const StreamingSearchResults: React.FunctionComponent<StreamingSearchResultsProps> = props => {
     const {
@@ -117,7 +105,7 @@ export const StreamingSearchResults: React.FunctionComponent<StreamingSearchResu
                     versionContext: resolveVersionContext(versionContext, availableVersionContexts),
                     searchContextSpec: selectedSearchContextSpec,
                     trace,
-                }),
+                }).pipe(debounceTime(500)),
             [
                 streamSearch,
                 query,
@@ -194,36 +182,10 @@ export const StreamingSearchResults: React.FunctionComponent<StreamingSearchResu
         setShowVersionContextWarning,
     ])
 
-    const [itemsToShow, setItemsToShow] = useState(initialItemsToShow)
-    const onBottomHit = useCallback(
-        () => setItemsToShow(items => Math.min(results?.results.length || 0, items + incrementalItemsToShow)),
-        [results?.results.length]
-    )
-    const logSearchResultClicked = useCallback(() => telemetryService.log('SearchResultClicked'), [telemetryService])
-    const renderResult = (result: GQL.GenericSearchResultInterface | GQL.IFileMatch): JSX.Element | undefined => {
-        switch (result.__typename) {
-            case 'FileMatch':
-                return (
-                    <FileMatch
-                        key={'file:' + result.file.url}
-                        location={location}
-                        eventLogger={eventLogger}
-                        icon={result.lineMatches && result.lineMatches.length > 0 ? SourceRepositoryIcon : FileIcon}
-                        result={result}
-                        onSelect={logSearchResultClicked}
-                        expanded={false}
-                        showAllMatches={false}
-                        isLightTheme={props.isLightTheme}
-                        allExpanded={allExpanded}
-                        fetchHighlightedFileLineRanges={props.fetchHighlightedFileLineRanges}
-                        settingsCascade={props.settingsCascade}
-                    />
-                )
-        }
-        return (
-            <SearchResult key={result.url} result={result} isLightTheme={props.isLightTheme} history={props.history} />
-        )
-    }
+    // Reset expanded state when new search is started
+    useEffect(() => {
+        setAllExpanded(false)
+    }, [location.search])
 
     const onSearchAgain = useCallback(
         (additionalFilters: string[]) => {
@@ -290,36 +252,7 @@ export const StreamingSearchResults: React.FunctionComponent<StreamingSearchResu
                     />
                 )}
 
-                {/* Results */}
-                <VirtualList
-                    className="mt-2"
-                    itemsToShow={itemsToShow}
-                    onShowMoreItems={onBottomHit}
-                    items={results?.results.map(result => renderResult(result)).filter(isDefined) || []}
-                />
-
-                {(!results || results?.state === 'loading') && (
-                    <div className="text-center my-4" data-testid="loading-container">
-                        <LoadingSpinner className="icon-inline" />
-                    </div>
-                )}
-
-                {results?.state === 'error' && (
-                    <ErrorAlert
-                        className="m-2"
-                        data-testid="search-results-list-error"
-                        error={results.error}
-                        history={history}
-                    />
-                )}
-
-                {results?.state === 'complete' && !results?.alert && results?.results.length === 0 && (
-                    <div className="alert alert-info d-flex m-2">
-                        <h3 className="m-0">
-                            <SearchIcon className="icon-inline" /> No results
-                        </h3>
-                    </div>
-                )}
+                <StreamingSearchResultsList {...props} results={results} allExpanded={allExpanded} />
             </div>
         </div>
     )

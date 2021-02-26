@@ -33,8 +33,6 @@ const (
 	graphQLRequestNameKey
 	originKey
 	sourceKey
-	isInternalKey
-	anonymousUIDKey
 )
 
 // trackOrigin specifies a URL value. When an incoming request has the request header "Origin" set
@@ -79,36 +77,6 @@ func GraphQLRequestName(ctx context.Context) string {
 // WithGraphQLRequestName sets the GraphQL request name in the context.
 func WithGraphQLRequestName(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, graphQLRequestNameKey, name)
-}
-
-// IsInternalRequest returns true if the request was handled by our internal API
-// handler.
-func IsInternalRequest(ctx context.Context) bool {
-	v, ok := ctx.Value(isInternalKey).(bool)
-	if ok {
-		return v
-	}
-	return false
-}
-
-// WithIsInternal sets whether or not the request was handled by our internal or
-// external API handler.
-func WithIsInternal(ctx context.Context, isInternal bool) context.Context {
-	return context.WithValue(ctx, isInternalKey, isInternal)
-}
-
-// AnonymousUID sets the anonymous UID associated with the request.
-func AnonymousUID(ctx context.Context) string {
-	v, ok := ctx.Value(anonymousUIDKey).(string)
-	if ok {
-		return v
-	}
-	return "unknown"
-}
-
-// WithAnonymousUID fetches the anonymous UID associated with the request.
-func WithAnonymousUID(ctx context.Context, uid string) context.Context {
-	return context.WithValue(ctx, anonymousUIDKey, uid)
 }
 
 // RequestOrigin returns the request origin (the value of the request header "Origin") for a request context.
@@ -261,7 +229,7 @@ func HTTPTraceMiddleware(next http.Handler) http.Handler {
 	}))
 }
 
-func TraceRoute(next http.Handler) http.Handler {
+func Route(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if p, ok := r.Context().Value(routeNameKey).(*string); ok {
 			if routeName := mux.CurrentRoute(r).GetName(); routeName != "" {
@@ -272,7 +240,7 @@ func TraceRoute(next http.Handler) http.Handler {
 	})
 }
 
-func TraceUser(ctx context.Context, userID int32) {
+func User(ctx context.Context, userID int32) {
 	if p, ok := ctx.Value(userKey).(*int32); ok {
 		*p = userID
 	}
