@@ -319,7 +319,7 @@ func NewGroupAvatarImageURL(gcs *storage.Client, urls map[string]struct{}) (stri
 	}
 
 	var buf bytes.Buffer
-	if err = jpeg.Encode(&buf, merged, &jpeg.Options{Quality: 80}); err != nil {
+	if err = jpeg.Encode(&buf, merged, &jpeg.Options{Quality: 100}); err != nil {
 		return "", err
 	}
 
