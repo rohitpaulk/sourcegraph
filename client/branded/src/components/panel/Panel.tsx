@@ -5,7 +5,8 @@ import { useHistory, useLocation } from 'react-router'
 import { Button } from 'reactstrap'
 import { Observable } from 'rxjs'
 import { map } from 'rxjs/operators'
-import { ContributableViewContainer } from '../../../../shared/src/api/protocol/contribution'
+import { ActionsNavItems } from '../../../../shared/src/actions/ActionsNavItems'
+import { ContributableMenu, ContributableViewContainer } from '../../../../shared/src/api/protocol/contribution'
 import { ActivationProps } from '../../../../shared/src/components/activation/Activation'
 import { FetchFileParameters } from '../../../../shared/src/components/CodeExcerpt'
 import { Resizable } from '../../../../shared/src/components/Resizable'
@@ -16,7 +17,6 @@ import { SettingsCascadeProps } from '../../../../shared/src/settings/settings'
 import { TelemetryProps } from '../../../../shared/src/telemetry/telemetryService'
 import { ThemeProps } from '../../../../shared/src/theme'
 import { useObservable } from '../../../../shared/src/util/useObservable'
-import { Tab as Tab1 } from '../Tabs'
 import { EmptyPanelView } from './views/EmptyPanelView'
 import { PanelView } from './views/PanelView'
 
@@ -37,7 +37,10 @@ interface Props
 /**
  * A tab and corresponding content to display in the panel.
  */
-interface PanelItem extends Tab1<string> {
+interface PanelItem {
+    id: string
+
+    label: React.ReactFragment
     /**
      * Controls the relative order of panel items. The items are laid out from highest priority (at the beginning)
      * to lowest priority (at the end). The default is 0.
@@ -120,12 +123,33 @@ const Panel: React.FunctionComponent<Props> = props => {
                         <Tab key={id}>{label}</Tab>
                     ))}
                 </TabList>
-                <Button
-                    onClick={handlePanelClose}
-                    close={true}
-                    className="bg-transparent border-0 close ml-auto"
-                    title="Close sidebar (Alt+S/Opt+S)"
-                />
+                <div>
+                    <ActionsNavItems
+                        {...props}
+                        // TODO remove references to Bootstrap from shared, get class name from prop
+                        // This is okay for now because the Panel is currently only used in the webapp
+                        // listClass="nav w-100 justify-content-end"
+                        // actionItemClass="nav-link"
+                        // actionItemIconClass="icon-inline"
+                        menu={ContributableMenu.PanelToolbar}
+                        scope={
+                            panels[tabIndex]
+                                ? {
+                                      type: 'panelView',
+                                      id: panels[tabIndex].id,
+                                      hasLocations: Boolean(panels[tabIndex].hasLocations),
+                                  }
+                                : undefined
+                        }
+                        wrapInList={true}
+                    />
+                    <Button
+                        onClick={handlePanelClose}
+                        close={true}
+                        className="bg-transparent border-0 close ml-auto"
+                        title="Close panel"
+                    />
+                </div>
             </div>
             <TabPanels className="h-100 overflow-auto">
                 {panels.map(({ id, element }) => (
