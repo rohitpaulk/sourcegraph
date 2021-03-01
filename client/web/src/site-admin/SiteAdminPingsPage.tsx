@@ -155,6 +155,14 @@ export const SiteAdminPingsPage: React.FunctionComponent<Props> = props => {
                         <li>Aggregate counts of lines changed, added, deleted in merged changeset</li>
                         <li>Total count of changesets manually added to a campaign</li>
                         <li>Total count of changesets manually added to a campaign that have been merged</li>
+                        <li>
+                            Aggregate counts of unique monthly users, by:
+                            <ul>
+                                <li>Whether they are contributed to campaigns</li>
+                                <li>Whether they only viewed campaigns</li>
+                            </ul>
+                        </li>
+                        <li>Weekly campaign (open, closed) and changesets counts (imported, published, unpublished, open, draft, merged, closed) for campaign cohorts created in the last 12 months</li>
                     </ul>
                 </li>
                 <li>
