@@ -327,7 +327,9 @@ func zoektSearch(ctx context.Context, db dbutil.DB, args *search.TextParameters,
 			})
 		}
 
-		return args.Zoekt.Client.StreamSearch(ctx, finalQuery, &searchOpts, backend.ZoektStreamFunc(func(event *zoekt.SearchResult) {
+		// The buffered backend.ZoektStreamFunc allows us to consume events from Zoekt
+		// while we wait for repo resolution.
+		bufSender, cleanup := bufferedSender(30, backend.ZoektStreamFunc(func(event *zoekt.SearchResult) {
 
 			mu.Lock()
 			foundResults = foundResults || event.FileCount != 0 || event.MatchCount != 0
@@ -365,7 +367,6 @@ func zoektSearch(ctx context.Context, db dbutil.DB, args *search.TextParameters,
 
 			limitHit = limitHit || len(partial) > 0
 
-			lastID := api.RepoID(-1) // PERF: avoid Update call if we have the same repository
 			matches := make([]SearchResultResolver, 0, len(files))
 			repoResolvers := make(RepositoryResolverCache)
 			for _, file := range files {
@@ -414,10 +415,6 @@ func zoektSearch(ctx context.Context, db dbutil.DB, args *search.TextParameters,
 						RepoResolver: repoResolver,
 					}
 					matches = append(matches, fm)
-					if id := repo.ID; lastID != id {
-						statusMap.Update(id, search.RepoStatusSearched|search.RepoStatusIndexed)
-						lastID = id
-					}
 				}
 			}
 
@@ -429,6 +426,9 @@ func zoektSearch(ctx context.Context, db dbutil.DB, args *search.TextParameters,
 				},
 			})
 		}))
+		defer cleanup()
+
+		return args.Zoekt.Client.StreamSearch(ctx, finalQuery, &searchOpts, bufSender)
 	})
 
 	if err := g.Wait(); err != nil {
@@ -444,11 +444,34 @@ func zoektSearch(ctx context.Context, db dbutil.DB, args *search.TextParameters,
 	}
 
 	if !foundResults && since(t0) >= searchOpts.MaxWallTime {
-		c.Send(SearchEvent{Stats: streaming.Stats{Status: mkStatusMap(search.RepoStatusTimedout | search.RepoStatusIndexed)}})
+		c.Send(SearchEvent{Stats: streaming.Stats{Status: mkStatusMap(search.RepoStatusTimedout)}})
 		return nil
 	}
-	c.Send(SearchEvent{Stats: streaming.Stats{Status: mkStatusMap(search.RepoStatusSearched | search.RepoStatusIndexed)}})
 	return nil
+}
+
+// bufferedSender returns a buffered Sender with capacity cap, and a cleanup
+// function which blocks until the buffer is drained. The cleanup function may
+// only be called once. For cap=0, bufferedSender returns the input sender.
+func bufferedSender(cap int, sender zoekt.Sender) (zoekt.Sender, func()) {
+	if cap == 0 {
+		return sender, func() {}
+	}
+	buf := make(chan *zoekt.SearchResult, cap-1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for e := range buf {
+			sender.Send(e)
+		}
+	}()
+	cleanup := func() {
+		close(buf)
+		<-done
+	}
+	return backend.ZoektStreamFunc(func(event *zoekt.SearchResult) {
+		buf <- event
+	}), cleanup
 }
 
 // zoektSearchReposOnly is used when select:repo is set, in which case we can ask zoekt
@@ -528,7 +551,7 @@ func escape(s string) string {
 		}
 	}
 	if count == 0 {
-		return string(s)
+		return s
 	}
 
 	escaped := make([]rune, 0, len(s)+count)
