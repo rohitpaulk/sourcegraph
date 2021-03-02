@@ -7,10 +7,10 @@ const DiagnosticsCountMigrationID = 1
 
 // DefinitionsCountMigrationID is the primary key of the migration record handled by an
 // instance of locationsCountMigrator. This is associated with the out-of-band migration
-// record inserted in migrations/frontend/1528395790_lsif_locations_migration.up.sql.
+// record inserted in migrations/frontend/1528395791_lsif_locations_migration.up.sql.
 const DefinitionsCountMigrationID = 3
 
 // ReferencesCountMigrationID is the primary key of the migration record handled by an
 // instance of locationsCountMigrator. This is associated with the out-of-band migration
-// record inserted in migrations/frontend/1528395790_lsif_locations_migration.up.sql.
+// record inserted in migrations/frontend/1528395791_lsif_locations_migration.up.sql.
 const ReferencesCountMigrationID = 4

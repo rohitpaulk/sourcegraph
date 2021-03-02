@@ -15,6 +15,7 @@
 - [Developing the web clients](web/index.md)
   - [Developing the web app](web/web_app.md)
   - [Developing the code host integrations](web/code_host_integrations.md)
+  - [Styling UI](web/styling.md)
 - [Developing the GraphQL API](graphql_api.md)
 - [Developing campaigns](campaigns/index.md)
 - [Developing code intelligence](codeintel/index.md)
@@ -25,6 +26,8 @@
 - [Code reviews](code_reviews.md)
 - [Commit messages](commit_messages.md)
 - [Exposing services](exposing-services.md)
+- [Developing a store](basestore.md)
+- [Developing an out-of-band migration](oobmigrations.md)
 
 ## [Languages](languages/index.md)
 
@@ -43,6 +46,7 @@
 - [Continuous Integration](continuous_integration.md)
 - [How to run tests](testing.md)
 - [Testing Principles](testing_principles.md)
+- [Testing web code](testing_web_code.md)
 
 ## Tools
 
