@@ -19,7 +19,7 @@ All notable changes to Sourcegraph are documented in this file.
 
 ### Changed
 
-- Pings now contain added, aggregated campaigns usage data: aggregate counts of unique monthly users and Weekly campaign and changesets counts for campaign cohorts created in the last 12 months. [#18604](https://github.com/sourcegraph/sourcegraph/pull/18604)
+- Pings now contain new, aggregated campaigns usage data: aggregate counts of unique monthly users, and weekly campaign and changesets counts for campaign cohorts created in the last 12 months. [#18604](https://github.com/sourcegraph/sourcegraph/pull/18604)
 
 ### Fixed
 
