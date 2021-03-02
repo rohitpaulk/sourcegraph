@@ -16,35 +16,35 @@ func init() {
 	gob.Register(&LocationData{})
 }
 
-type serializer struct {
+type Serializer struct {
 	readers sync.Pool
 	writers sync.Pool
 }
 
-func newSerializer() *serializer {
-	return &serializer{
+func NewSerializer() *Serializer {
+	return &Serializer{
 		readers: sync.Pool{New: func() interface{} { return new(gzip.Reader) }},
 		writers: sync.Pool{New: func() interface{} { return gzip.NewWriter(nil) }},
 	}
 }
 
 // MarshalDocumentData transforms document data into a string of bytes writable to disk.
-func (s *serializer) MarshalDocumentData(document DocumentData) ([]byte, error) {
+func (s *Serializer) MarshalDocumentData(document DocumentData) ([]byte, error) {
 	return s.withEncoder(func(encoder *gob.Encoder) error { return encoder.Encode(&document) })
 }
 
 // MarshalResultChunkData transforms result chunk data into a string of bytes writable to disk.
-func (s *serializer) MarshalResultChunkData(resultChunks ResultChunkData) ([]byte, error) {
+func (s *Serializer) MarshalResultChunkData(resultChunks ResultChunkData) ([]byte, error) {
 	return s.withEncoder(func(encoder *gob.Encoder) error { return encoder.Encode(&resultChunks) })
 }
 
 // MarshalLocations transforms a slice of locations into a string of bytes writable to disk.
-func (s *serializer) MarshalLocations(locations []LocationData) ([]byte, error) {
+func (s *Serializer) MarshalLocations(locations []LocationData) ([]byte, error) {
 	return s.withEncoder(func(encoder *gob.Encoder) error { return encoder.Encode(&locations) })
 }
 
 // withEncoder creates a gob encoded, calls the given function with it, then compressed the encoded output.
-func (s *serializer) withEncoder(f func(encoder *gob.Encoder) error) ([]byte, error) {
+func (s *Serializer) withEncoder(f func(encoder *gob.Encoder) error) ([]byte, error) {
 	gzipWriter := s.writers.Get().(*gzip.Writer)
 	defer s.writers.Put(gzipWriter)
 
@@ -67,25 +67,25 @@ func (s *serializer) withEncoder(f func(encoder *gob.Encoder) error) ([]byte, er
 }
 
 // UnmarshalDocumentData is the inverse of MarshalDocumentData.
-func (s *serializer) UnmarshalDocumentData(data []byte) (document DocumentData, err error) {
+func (s *Serializer) UnmarshalDocumentData(data []byte) (document DocumentData, err error) {
 	err = s.withDecoder(data, func(decoder *gob.Decoder) error { return decoder.Decode(&document) })
 	return document, err
 }
 
 // UnmarshalResultChunkData is the inverse of MarshalResultChunkData.
-func (s *serializer) UnmarshalResultChunkData(data []byte) (resultChunk ResultChunkData, err error) {
+func (s *Serializer) UnmarshalResultChunkData(data []byte) (resultChunk ResultChunkData, err error) {
 	err = s.withDecoder(data, func(decoder *gob.Decoder) error { return decoder.Decode(&resultChunk) })
 	return resultChunk, err
 }
 
 // UnmarshalLocations is the inverse of MarshalLocations.
-func (s *serializer) UnmarshalLocations(data []byte) (locations []LocationData, err error) {
+func (s *Serializer) UnmarshalLocations(data []byte) (locations []LocationData, err error) {
 	err = s.withDecoder(data, func(decoder *gob.Decoder) error { return decoder.Decode(&locations) })
 	return locations, err
 }
 
 // withDecoder creates a gob decoder with the given encoded data and calls the given function with it.
-func (s *serializer) withDecoder(data []byte, f func(decoder *gob.Decoder) error) (err error) {
+func (s *Serializer) withDecoder(data []byte, f func(decoder *gob.Decoder) error) (err error) {
 	r := s.readers.Get().(*gzip.Reader)
 	defer s.readers.Put(r)
 

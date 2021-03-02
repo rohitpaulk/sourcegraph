@@ -1,4 +1,4 @@
-package lsifstore
+package migration
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/keegancsmith/sqlf"
 
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/lsifstore"
 	"github.com/sourcegraph/sourcegraph/internal/database/basestore"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbconn"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbtesting"
@@ -19,9 +20,9 @@ func TestDiagnosticsCountMigrator(t *testing.T) {
 		t.Skip()
 	}
 	dbtesting.SetupGlobalTestDB(t)
-	store := NewStore(dbconn.Global, &observation.TestContext)
-	migrator := NewDiagnosticsCountMigrator(store)
-	serializer := newSerializer()
+	store := lsifstore.NewStore(dbconn.Global, &observation.TestContext)
+	migrator := NewDiagnosticsCountMigrator(store, 1000)
+	serializer := lsifstore.NewSerializer()
 
 	assertProgress := func(expectedProgress float64) {
 		if progress, err := migrator.Progress(context.Background()); err != nil {
@@ -41,15 +42,15 @@ func TestDiagnosticsCountMigrator(t *testing.T) {
 		}
 	}
 
-	n := DiagnosticCountMigrationBatchSize * 2
+	n := 2000
 	expectedCounts := make([]int, 0, n)
-	diagnostics := make([]DiagnosticData, 0, n)
+	diagnostics := make([]lsifstore.DiagnosticData, 0, n)
 
 	for i := 0; i < n; i++ {
 		expectedCounts = append(expectedCounts, i+1)
-		diagnostics = append(diagnostics, DiagnosticData{Code: fmt.Sprintf("c%d", i)})
+		diagnostics = append(diagnostics, lsifstore.DiagnosticData{Code: fmt.Sprintf("c%d", i)})
 
-		data, err := serializer.MarshalDocumentData(DocumentData{
+		data, err := serializer.MarshalDocumentData(lsifstore.DocumentData{
 			Diagnostics: diagnostics,
 		})
 		if err != nil {
@@ -57,7 +58,8 @@ func TestDiagnosticsCountMigrator(t *testing.T) {
 		}
 
 		if err := store.Exec(context.Background(), sqlf.Sprintf(
-			"INSERT INTO lsif_data_documents (dump_id, path, data, schema_version, num_diagnostics) VALUES (42, %s, %s, 1, 0)",
+			"INSERT INTO lsif_data_documents (dump_id, path, data, schema_version, num_diagnostics) VALUES (%s, %s, %s, 1, 0)",
+			42+i/(n/2), // 50% id=42, 50% id=43
 			fmt.Sprintf("p%04d", i),
 			data,
 		)); err != nil {
