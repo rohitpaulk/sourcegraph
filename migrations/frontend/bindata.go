@@ -106,7 +106,7 @@
 // 1528395784_preview_filter_fields.up.sql (2.461kB)
 // 1528395785_out_of_band_migration_table.down.sql (114B)
 // 1528395785_out_of_band_migration_table.up.sql (3.838kB)
-// 1528395786_diagnostic_counts_migration.down.sql (16B)
+// 1528395786_diagnostic_counts_migration.down.sql (18B)
 // 1528395786_diagnostic_counts_migration.up.sql (277B)
 // 1528395787_reconciler_changesets_view.down.sql (60B)
 // 1528395787_reconciler_changesets_view.up.sql (598B)
@@ -114,6 +114,8 @@
 // 1528395788_campaigns_ssh_key_migration.up.sql (272B)
 // 1528395789_add_encryption_key_ident.down.sql (88B)
 // 1528395789_add_encryption_key_ident.up.sql (116B)
+// 1528395790_lsif_locations_migration.down.sql (18B)
+// 1528395790_lsif_locations_migration.up.sql (537B)
 
 package migrations
 
@@ -2302,7 +2304,7 @@ func _1528395785_out_of_band_migration_tableUpSql() (*asset, error) {
 	return a, nil
 }
 
-var __1528395786_diagnostic_counts_migrationDownSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x72\x72\x75\xf7\xf4\xb3\xe6\xe2\x72\xf6\xf7\xf5\xf5\x0c\xb1\xe6\x02\x04\x00\x00\xff\xff\x80\xfb\x5a\xa5\x10\x00\x00\x00")
+var __1528395786_diagnostic_counts_migrationDownSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xd2\xd5\x55\xf0\xcb\x2f\xc9\xc8\xcc\x4b\x57\x28\xc9\x57\x48\xc9\xd7\xe3\x02\x04\x00\x00\xff\xff\xbd\x7e\x9c\x52\x12\x00\x00\x00")
 
 func _1528395786_diagnostic_counts_migrationDownSqlBytes() ([]byte, error) {
 	return bindataRead(
@@ -2318,7 +2320,7 @@ func _1528395786_diagnostic_counts_migrationDownSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "1528395786_diagnostic_counts_migration.down.sql", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
-	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xec, 0x6c, 0xe7, 0xaa, 0xc6, 0xdb, 0x9b, 0x52, 0x49, 0xad, 0xde, 0x34, 0x6a, 0xa9, 0x90, 0x21, 0x97, 0xcc, 0xcd, 0x35, 0xee, 0xc6, 0xd1, 0x36, 0xf1, 0xa0, 0x6c, 0xe8, 0x73, 0x42, 0x77, 0x41}}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x6a, 0x42, 0x8f, 0xd2, 0x33, 0x7c, 0x76, 0x3a, 0x2f, 0x44, 0x54, 0x9, 0xe1, 0x1b, 0xa2, 0xc0, 0xcd, 0x9d, 0xe4, 0x44, 0x5, 0xbf, 0x96, 0xc1, 0xee, 0xfd, 0x33, 0x72, 0x7f, 0xcc, 0x84, 0x65}}
 	return a, nil
 }
 
@@ -2459,6 +2461,46 @@ func _1528395789_add_encryption_key_identUpSql() (*asset, error) {
 
 	info := bindataFileInfo{name: "1528395789_add_encryption_key_ident.up.sql", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xed, 0xcd, 0xf6, 0x92, 0xb6, 0x1a, 0x3c, 0x2e, 0xbc, 0xd8, 0x75, 0x91, 0x76, 0xe3, 0xeb, 0x23, 0x8f, 0x65, 0xbf, 0xd5, 0xa9, 0x45, 0xfd, 0x50, 0xaf, 0x1f, 0x8a, 0x14, 0xff, 0x86, 0x67, 0xa4}}
+	return a, nil
+}
+
+var __1528395790_lsif_locations_migrationDownSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xd2\xd5\x55\xf0\xcb\x2f\xc9\xc8\xcc\x4b\x57\x28\xc9\x57\x48\xc9\xd7\xe3\x02\x04\x00\x00\xff\xff\xbd\x7e\x9c\x52\x12\x00\x00\x00")
+
+func _1528395790_lsif_locations_migrationDownSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__1528395790_lsif_locations_migrationDownSql,
+		"1528395790_lsif_locations_migration.down.sql",
+	)
+}
+
+func _1528395790_lsif_locations_migrationDownSql() (*asset, error) {
+	bytes, err := _1528395790_lsif_locations_migrationDownSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "1528395790_lsif_locations_migration.down.sql", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x6a, 0x42, 0x8f, 0xd2, 0x33, 0x7c, 0x76, 0x3a, 0x2f, 0x44, 0x54, 0x9, 0xe1, 0x1b, 0xa2, 0xc0, 0xcd, 0x9d, 0xe4, 0x44, 0x5, 0xbf, 0x96, 0xc1, 0xee, 0xfd, 0x33, 0x72, 0x7f, 0xcc, 0x84, 0x65}}
+	return a, nil
+}
+
+var __1528395790_lsif_locations_migrationUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xbc\x90\xc1\x4a\x3b\x31\x10\x87\xef\xfb\x14\x73\x6b\x0b\x69\xf9\xf3\xaf\x78\xe9\x49\x6b\xad\x81\x36\x11\xbb\x7a\x0d\x69\x66\xb6\x04\xb2\x33\x4b\x36\x11\x7c\x7b\xd9\xd2\x17\xf0\xa0\xd7\x1f\xdf\x0c\x1f\xdf\xe3\x6e\xaf\xcd\xa6\x69\xb4\x39\xed\xde\x5a\xd0\xa6\xb5\x20\xb5\x38\xe9\xdc\xd9\x33\xba\x3e\x5e\xb2\x2f\x51\x78\x84\x79\x44\x05\x85\x7c\xaf\x20\x48\x3f\x08\x13\x17\x05\x48\x63\xc8\x71\x98\x10\x05\x91\x4b\x16\xac\x81\x50\x01\x0b\x3b\xa4\xb1\xe4\x1a\x4a\xfc\xa4\x45\xf3\xf1\x70\x78\xdf\x9d\x60\xbe\x56\x30\x0b\x82\xb4\x8c\x5c\x28\xa5\x78\x21\x0e\x34\xbb\x8d\xd7\x6d\x89\xe7\x55\x1a\x63\xe7\xd0\x17\xef\x90\xba\xc8\xf1\xea\x30\x51\xaf\x32\xd4\xe4\x0b\x01\xd7\xde\x25\x09\x37\xbb\x2e\x4b\x0f\x17\x39\x2f\x89\xa7\x3f\x08\x83\xff\x4a\xe2\x71\x3a\x59\xaf\xfe\xdf\xaf\xfe\xcd\x14\x94\x5c\x69\xd1\x58\x03\x5b\x6b\x9e\x0f\x7a\xdb\xc2\x93\x05\x63\xdb\x17\x6d\xf6\x7f\x1b\xe1\xee\x87\x11\x32\x75\x94\x27\xe6\xb7\x1b\x6c\xed\xf1\xa8\xdb\x4d\xf3\x1d\x00\x00\xff\xff\xe3\x4b\x21\xc8\x19\x02\x00\x00")
+
+func _1528395790_lsif_locations_migrationUpSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__1528395790_lsif_locations_migrationUpSql,
+		"1528395790_lsif_locations_migration.up.sql",
+	)
+}
+
+func _1528395790_lsif_locations_migrationUpSql() (*asset, error) {
+	bytes, err := _1528395790_lsif_locations_migrationUpSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "1528395790_lsif_locations_migration.up.sql", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x3d, 0x5a, 0x79, 0x9b, 0x4, 0x84, 0xc2, 0x1d, 0x6b, 0xef, 0xf8, 0x53, 0xcd, 0xa2, 0xaf, 0x6b, 0x41, 0x4c, 0xb4, 0xb1, 0x87, 0xa2, 0xac, 0x65, 0xe7, 0x87, 0x7e, 0x81, 0x61, 0x41, 0x5a, 0x62}}
 	return a, nil
 }
 
@@ -2667,6 +2709,8 @@ var _bindata = map[string]func() (*asset, error){
 	"1528395788_campaigns_ssh_key_migration.up.sql":                                          _1528395788_campaigns_ssh_key_migrationUpSql,
 	"1528395789_add_encryption_key_ident.down.sql":                                           _1528395789_add_encryption_key_identDownSql,
 	"1528395789_add_encryption_key_ident.up.sql":                                             _1528395789_add_encryption_key_identUpSql,
+	"1528395790_lsif_locations_migration.down.sql":                                           _1528395790_lsif_locations_migrationDownSql,
+	"1528395790_lsif_locations_migration.up.sql":                                             _1528395790_lsif_locations_migrationUpSql,
 }
 
 // AssetDebug is true if the assets were built with the debug flag enabled.
@@ -2827,6 +2871,8 @@ var _bintree = &bintree{nil, map[string]*bintree{
 	"1528395788_campaigns_ssh_key_migration.up.sql":                                          {_1528395788_campaigns_ssh_key_migrationUpSql, map[string]*bintree{}},
 	"1528395789_add_encryption_key_ident.down.sql":                                           {_1528395789_add_encryption_key_identDownSql, map[string]*bintree{}},
 	"1528395789_add_encryption_key_ident.up.sql":                                             {_1528395789_add_encryption_key_identUpSql, map[string]*bintree{}},
+	"1528395790_lsif_locations_migration.down.sql":                                           {_1528395790_lsif_locations_migrationDownSql, map[string]*bintree{}},
+	"1528395790_lsif_locations_migration.up.sql":                                             {_1528395790_lsif_locations_migrationUpSql, map[string]*bintree{}},
 }}
 
 // RestoreAsset restores an asset under the given directory.

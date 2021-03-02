@@ -17,6 +17,12 @@ import (
 // CurrentDocumentSchemaVersion is the schema version used for new lsif_data_documents rows.
 const CurrentDocumentSchemaVersion = 2
 
+// CurrentDefinitionsSchemaVersion is the schema version used for new lsif_data_definitions rows.
+const CurrentDefinitionsSchemaVersion = 2
+
+// CurrentReferencesSchemaVersion is the schema version used for new lsif_data_references rows.
+const CurrentReferencesSchemaVersion = 2
+
 func (s *Store) WriteMeta(ctx context.Context, bundleID int, meta MetaData) (err error) {
 	ctx, endObservation := s.operations.writeMeta.With(ctx, &err, observation.Args{LogFields: []log.Field{
 		log.Int("bundleID", bundleID),
@@ -104,7 +110,7 @@ func (s *Store) WriteDefinitions(ctx context.Context, bundleID int, monikerLocat
 	}})
 	defer endObservation(1, observation.Args{})
 
-	count, err := s.writeDefinitionReferences(ctx, bundleID, "lsif_data_definitions", monikerLocations)
+	count, err := s.writeDefinitionReferences(ctx, bundleID, "lsif_data_definitions", CurrentDefinitionsSchemaVersion, monikerLocations)
 	if err != nil {
 		return err
 	}
@@ -118,7 +124,7 @@ func (s *Store) WriteReferences(ctx context.Context, bundleID int, monikerLocati
 	}})
 	defer endObservation(1, observation.Args{})
 
-	count, err := s.writeDefinitionReferences(ctx, bundleID, "lsif_data_references", monikerLocations)
+	count, err := s.writeDefinitionReferences(ctx, bundleID, "lsif_data_references", CurrentReferencesSchemaVersion, monikerLocations)
 	if err != nil {
 		return err
 	}
@@ -126,7 +132,7 @@ func (s *Store) WriteReferences(ctx context.Context, bundleID int, monikerLocati
 	return nil
 }
 
-func (s *Store) writeDefinitionReferences(ctx context.Context, bundleID int, tableName string, monikerLocations chan MonikerLocations) (int, error) {
+func (s *Store) writeDefinitionReferences(ctx context.Context, bundleID int, tableName string, version int, monikerLocations chan MonikerLocations) (int, error) {
 	var count uint32
 
 	inserter := func(inserter *batch.BatchInserter) error {
@@ -136,7 +142,7 @@ func (s *Store) writeDefinitionReferences(ctx context.Context, bundleID int, tab
 				return err
 			}
 
-			if err := inserter.Insert(ctx, bundleID, v.Scheme, v.Identifier, data); err != nil {
+			if err := inserter.Insert(ctx, bundleID, v.Scheme, v.Identifier, data, version, len(v.Locations)); err != nil {
 				return err
 			}
 
@@ -146,7 +152,7 @@ func (s *Store) writeDefinitionReferences(ctx context.Context, bundleID int, tab
 		return nil
 	}
 
-	err := withBatchInserter(ctx, s.Handle().DB(), tableName, []string{"dump_id", "scheme", "identifier", "data"}, inserter)
+	err := withBatchInserter(ctx, s.Handle().DB(), tableName, []string{"dump_id", "scheme", "identifier", "data", "schema_version", "num_locations"}, inserter)
 	return int(count), err
 }
 

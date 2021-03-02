@@ -1,0 +1,7 @@
+BEGIN;
+
+DROP TABLE lsif_data_definitions_schema_versions;
+DROP TRIGGER lsif_data_definitions_schema_versions_insert ON lsif_data_definitions;
+DROP FUNCTION update_lsif_data_definitions_schema_versions_insert;
+
+COMMIT;
