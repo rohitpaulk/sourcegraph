@@ -116,7 +116,11 @@ const Panel: React.FunctionComponent<Props> = props => {
     }
 
     return (
-        <Tabs className="d-flex flex-column w-100 overflow-hidden" index={tabIndex} onChange={handleActiveTab}>
+        <Tabs
+            className="d-flex flex-column w-100 overflow-hidden border-top"
+            index={tabIndex}
+            onChange={handleActiveTab}
+        >
             <div className="bg-white d-flex justify-content-between">
                 <TabList>
                     {panels.map(({ label, id }) => (
