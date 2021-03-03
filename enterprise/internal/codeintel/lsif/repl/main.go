@@ -32,6 +32,7 @@ cd <path>                                             change directory
 `
 
 func main() {
+	fmt.Printf("pid: %d\n", os.Getpid())
 	var bundles []*correlation.GroupedBundleDataMaps
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -68,6 +69,11 @@ func main() {
 				break
 			}
 
+			if len(bundles) <= dumpID {
+				fmt.Printf("Dump ID '%d' does not exist", dumpID)
+				break
+			}
+
 			err = queryBundle(bundles[dumpID], path, line, column)
 			if err != nil {
 				fmt.Println(helpMsg)
@@ -85,6 +91,13 @@ func main() {
 				fmt.Println("first argument should be int")
 				break
 			}
+
+			if len(bundles) <= bundleID {
+				fmt.Printf("Bundle ID '%d' does not exist", bundleID)
+				break
+			}
+
+			// fmt.Printf("%+v\n", bundles[bundleID])
 
 			idx := 0
 			for path := range bundles[bundleID].Documents {
