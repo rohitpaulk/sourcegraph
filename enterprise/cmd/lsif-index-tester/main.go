@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/inconshreveable/log15"
 	"github.com/pelletier/go-toml"
 	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/lsif/correlation"
+	"github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/lsifstore"
 	"github.com/sourcegraph/sourcegraph/internal/logging"
 	"github.com/sourcegraph/sourcegraph/internal/trace"
 )
@@ -20,14 +22,19 @@ import (
 //   We need to check for lsif-clang, lsif-validate at start time.
 
 type ProjectResult struct {
-	success     bool
-	memoryUsage int64
-	output      string
+	success bool
+	usage   UsageStats
+	output  string
 }
 
 type IndexerResult struct {
-	memoryUsage int64
-	output      []byte
+	usage  UsageStats
+	output []byte
+}
+
+type UsageStats struct {
+	// Memory usage in kilobytes by child process.
+	memory int64
 }
 
 func main() {
@@ -98,45 +105,42 @@ func testProject(ctx context.Context, indexer, project string) (ProjectResult, e
 		result, err = testLsifClang(ctx, project)
 		if err != nil {
 			return ProjectResult{
-				success:     false,
-				memoryUsage: result.memoryUsage,
-				output:      string(result.output),
+				success: false,
+				usage: UsageStats{
+					memory: -1,
+				},
+				output: string(result.output),
 			}, err
 		}
 	}
+
+	log15.Debug("... \t Resource Usage:", "usage", result.usage)
 
 	output, err := validateDump(project)
 	if err != nil {
 		fmt.Println("Not valid")
 		return ProjectResult{
-			success:     false,
-			memoryUsage: result.memoryUsage,
-			output:      string(output),
+			success: false,
+			usage:   result.usage,
+			output:  string(output),
 		}, err
 	} else {
 		log15.Debug("... Validated dump.lsif")
 	}
 
 	bundle, err := readBundle(1, project)
-	fmt.Printf("Bundle: %+v\n", bundle)
+	// fmt.Printf("Bundle: %+v\n", bundle)
 	// if err != nil {
 	// 	return []byte{}, err
 	// }
 	// // fmt.Printf("Bundle: %+v\n", bundle)
 
-	path := "src/uses_header.c"
-	line := 6
-	character := 8
-
-	results, err := correlation.Query(bundle, path, line, character)
-	fmt.Printf("Results: %+v\n", results)
-
-	// validateTestCases(directory)
+	validateTestCases(project, bundle)
 
 	return ProjectResult{
-		success:     true,
-		memoryUsage: result.memoryUsage,
-		output:      string(output),
+		success: true,
+		usage:   result.usage,
+		output:  string(output),
 	}, nil
 }
 
@@ -146,14 +150,14 @@ func testLsifClang(ctx context.Context, project string) (IndexerResult, error) {
 	output, err := generateCompileCommands(project)
 	if err != nil {
 		return IndexerResult{
-			memoryUsage: -1,
-			output:      output,
+			usage:  UsageStats{memory: -1},
+			output: output,
 		}, err
 	} else {
 		log15.Debug("... Generated compile_commands.json")
 	}
 
-	output, mem, err := generateLsifDump(ctx, project)
+	output, usage, err := runLsifClang(ctx, project)
 	if err != nil {
 		log.Println(output)
 		log.Fatal(err)
@@ -162,8 +166,8 @@ func testLsifClang(ctx context.Context, project string) (IndexerResult, error) {
 	}
 
 	return IndexerResult{
-		memoryUsage: mem,
-		output:      output,
+		usage:  usage,
+		output: output,
 	}, err
 }
 
@@ -174,22 +178,22 @@ func generateCompileCommands(directory string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-func generateLsifDump(ctx context.Context, directory string) ([]byte, int64, error) {
+func runLsifClang(ctx context.Context, directory string) ([]byte, UsageStats, error) {
 	cmd := exec.Command("lsif-clang", "compile_commands.json")
 	cmd.Dir = directory
 
+	log15.Debug("... Generating dump.lsif")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return output, -1, err
+		return output, UsageStats{memory: -1}, err
 	}
 
 	sysUsage := cmd.ProcessState.SysUsage()
 	mem, _ := MaxMemoryInKB(sysUsage)
-	log15.Debug("Max memory", "memory", mem)
 	// fmt.Println("Memory Usage:", mem, "kB")
 	// fmt.Println("User CPU", sysUsage.Utime)
 
-	return output, mem, err
+	return output, UsageStats{memory: mem}, err
 }
 
 func validateDump(directory string) ([]byte, error) {
@@ -201,24 +205,61 @@ func validateDump(directory string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-func validateTestCases(directory string) {
-	doc := []byte(`
-		[Definitions]
-
-			[Definitions.example]
-			Request.TextDocument = "src/uses_header.c"
-			Request.Position.Line = 6
-			Request.Position.Character = 8
-
-			[Definitions.other]
-			Request.TextDocument = "src/uses_header.c"
-			Request.Position.Line = 6
-			Request.Position.Character = 8
-	`)
+func validateTestCases(directory string, bundle *correlation.GroupedBundleDataMaps) {
+	doc, err := ioutil.ReadFile(directory + "/test.toml")
+	if err != nil {
+		log15.Info("No file exists here")
+		return
+	}
 
 	testCase := LsifTest{}
 	toml.Unmarshal(doc, &testCase)
-	// fmt.Printf("%+v", testCase)
+
+	for _, definitionRequest := range testCase.Definitions {
+		path := definitionRequest.Request.TextDocument
+		line := definitionRequest.Request.Position.Line
+		character := definitionRequest.Request.Position.Character
+
+		results, err := correlation.Query(bundle, path, line, character)
+
+		if err != nil {
+			return
+		}
+
+		if len(results) != 1 {
+			log.Fatalf("Had too many results: %v", results)
+		}
+
+		definitions := results[0].Definitions
+
+		if len(definitions) > 1 {
+			log.Fatalf("Had too many definitions: %v", definitions)
+		} else if len(definitions) == 0 {
+			log.Fatalf("Found no definitions: %v", definitions)
+		}
+
+		response := transformLocationToResponse(definitions[0])
+		if diff := cmp.Diff(response, definitionRequest.Response); diff != "" {
+			log.Fatalf("Bad diffs: %s", diff)
+		}
+	}
+}
+
+func transformLocationToResponse(location lsifstore.LocationData) DefinitionResponse {
+	return DefinitionResponse{
+		TextDocument: location.URI,
+		Range: Range{
+			Start: Position{
+				Line:      location.StartLine,
+				Character: location.StartCharacter,
+			},
+			End: Position{
+				Line:      location.EndLine,
+				Character: location.EndCharacter,
+			},
+		},
+	}
+
 }
 
 func getWriter(ctx context.Context) *os.File {

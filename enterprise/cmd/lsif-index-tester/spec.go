@@ -1,8 +1,13 @@
 package main
 
 type Position struct {
-	Line      int64 `json:"line"`
-	Character int64 `json:"character"`
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
+type Range struct {
+	Start Position
+	End   Position
 }
 
 type DefinitionRequest struct {
@@ -10,7 +15,10 @@ type DefinitionRequest struct {
 	Position     Position `json:"position"`
 }
 
-type DefinitionResponse struct{}
+type DefinitionResponse struct {
+	TextDocument string `json:"textDocument"`
+	Range        Range
+}
 
 type DefinitionTest struct {
 	Request  DefinitionRequest  `json:"request"`
