@@ -222,15 +222,15 @@ export const TreePage: React.FunctionComponent<Props> = ({
             return
         }
         const viewerIdPromise = props.extensionsController.extHostAPI
-            .then(extensionHostAPI => {
-                return extensionHostAPI.addViewerIfNotExists({
+            .then(extensionHostAPI =>
+                extensionHostAPI.addViewerIfNotExists({
                     type: 'DirectoryViewer',
                     isActive: true,
                     resource: uri,
                 })
-            })
+            )
             .catch(error => {
-                console.error('Error adding viewer to extension host: ', error)
+                console.error('Error adding viewer to extension host:', error)
                 return null
             })
 
@@ -238,10 +238,10 @@ export const TreePage: React.FunctionComponent<Props> = ({
             Promise.all([props.extensionsController.extHostAPI, viewerIdPromise])
                 .then(([extensionHostAPI, viewerId]) => {
                     if (viewerId) {
-                        extensionHostAPI.removeViewer(viewerId)
+                        return extensionHostAPI.removeViewer(viewerId)
                     }
                 })
-                .catch(error => console.error('Error removing viewer from extension host: ', error))
+                .catch(error => console.error('Error removing viewer from extension host:', error))
         }
     }, [uri, codeInsightsEnabled, props.extensionsController])
 
@@ -250,7 +250,7 @@ export const TreePage: React.FunctionComponent<Props> = ({
         useMemo(
             () =>
                 from(props.extensionsController.extHostAPI).pipe(
-                    switchMap(extHostAPI => extHostAPI.getWorkspaceRoots()),
+                    switchMap(extensionHostAPI => extensionHostAPI.getWorkspaceRoots()),
                     map(workspaceRoots => workspaceRoots[0]?.uri)
                 ),
             [props.extensionsController]
@@ -280,7 +280,7 @@ export const TreePage: React.FunctionComponent<Props> = ({
                           )
                       )
                     : EMPTY,
-            [codeInsightsEnabled, workspaceUri, uri]
+            [codeInsightsEnabled, workspaceUri, uri, props.extensionsController]
         )
     )
 
