@@ -27,9 +27,9 @@ func Correlate(ctx context.Context, r io.Reader, dumpID int, root string, getChi
 	canonicalize(state)
 
 	// Remove elements we don't need to store
-	// if err := prune(ctx, state, root, getChildren); err != nil {
-	// 	return nil, err
-	// }
+	if err := prune(ctx, state, root, getChildren); err != nil {
+		return nil, err
+	}
 
 	// Convert data to the format we send to the writer
 	groupedBundleData, err := groupBundleData(ctx, state, dumpID)

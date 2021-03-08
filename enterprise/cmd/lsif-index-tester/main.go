@@ -179,6 +179,8 @@ func generateCompileCommands(directory string) ([]byte, error) {
 }
 
 func runLsifClang(ctx context.Context, directory string) ([]byte, UsageStats, error) {
+	// TODO: We should add how long it takes to generate this.
+
 	cmd := exec.Command("lsif-clang", "compile_commands.json")
 	cmd.Dir = directory
 
@@ -208,7 +210,7 @@ func validateDump(directory string) ([]byte, error) {
 func validateTestCases(directory string, bundle *correlation.GroupedBundleDataMaps) {
 	doc, err := ioutil.ReadFile(directory + "/test.toml")
 	if err != nil {
-		log15.Info("No file exists here")
+		log15.Warn("No file exists here")
 		return
 	}
 
@@ -223,7 +225,7 @@ func validateTestCases(directory string, bundle *correlation.GroupedBundleDataMa
 		results, err := correlation.Query(bundle, path, line, character)
 
 		if err != nil {
-			return
+			log.Fatalf("Failed query: %s", err)
 		}
 
 		if len(results) != 1 {
@@ -243,6 +245,8 @@ func validateTestCases(directory string, bundle *correlation.GroupedBundleDataMa
 			log.Fatalf("Bad diffs: %s", diff)
 		}
 	}
+
+	log15.Info("Passed tests")
 }
 
 func transformLocationToResponse(location lsifstore.LocationData) DefinitionResponse {

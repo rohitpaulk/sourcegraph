@@ -35,11 +35,11 @@ func readBundle(dumpID int, root string) (*correlation.GroupedBundleDataMaps, er
 
 func makeExistenceFunc(directory string) existence.GetChildrenFunc {
 	return func(ctx context.Context, dirnames []string) (map[string][]string, error) {
-		if dirnames[0] == "" {
-			dirnames[0] = "."
-		}
+		// NOTE: We're using find because it allows us to look for things outside of git directories (you might just have a bunch
+		// of code somewhere, outside of a git repo). But if you're experiencing big slowdowns, you may want to try and consider
+		// making this a bit smarter to prune away things (like in node_modules for example... or even just using git ls-files like
+		// in repl/main.go)
 
-		// TODO: could probably just walk this in Go...
 		cmd := exec.Command("bash", "-c", fmt.Sprintf("find %s -maxdepth 1", strings.Join(dirnames, " ")))
 		cmd.Dir = directory
 
@@ -48,16 +48,10 @@ func makeExistenceFunc(directory string) existence.GetChildrenFunc {
 			log.Fatalf("find failed with output '%v'\nArgs were '%v'\n", string(out), dirnames)
 		}
 
-		res, err := parseDirectoryChildren(dirnames, strings.Split(string(out), "\n")), nil
-		fmt.Println("=============")
-		fmt.Printf("parseDirectory: %+v\n", res)
-		fmt.Println(string(out))
-		fmt.Println("=============")
-		return res, err
+		return parseDirectoryChildren(dirnames, strings.Split(string(out), "\n")), nil
 	}
 }
 
-// TODO Probably dont want this exactly like this.
 func parseDirectoryChildren(dirnames, paths []string) map[string][]string {
 	childrenMap := map[string][]string{}
 
