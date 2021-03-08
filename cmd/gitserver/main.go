@@ -133,7 +133,7 @@ func main() {
 	// Create Handler now since it also initializes state
 	handler := ot.Middleware(gitserver.Handler())
 
-	go debugserver.Start()
+	go debugserver.Start(nil)
 
 	janitorInterval2, err := time.ParseDuration(janitorInterval)
 	if err != nil {
