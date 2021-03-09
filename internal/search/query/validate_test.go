@@ -98,7 +98,8 @@ func TestAndOrQuery_Validation(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run("validate and/or query", func(t *testing.T) {
-			_, err := ProcessAndOr(c.input, ParserOptions{c.searchType, false})
+			nodes, _ := ProcessAndOr(c.input, ParserOptions{c.searchType, false})
+			_, err := toAst(nodes)
 			if err == nil {
 				t.Fatal(fmt.Sprintf("expected test for %s to fail", c.input))
 			}
@@ -165,11 +166,12 @@ func TestAndOrQuery_RegexpPatterns(t *testing.T) {
 		},
 	}
 	t.Run("for regexp field", func(t *testing.T) {
-		query, err := ProcessAndOr(c.query, ParserOptions{SearchTypeRegex, false})
+		nodes, _ := ProcessAndOr(c.query, ParserOptions{SearchTypeRegex, false})
+		query, err := toAst(nodes)
 		if err != nil {
 			t.Fatal(err)
 		}
-		gotValues, gotNegatedValues := query.RegexpPatterns(c.field)
+		gotValues, gotNegatedValues := query[0].RegexpPatterns(c.field)
 		if diff := cmp.Diff(c.want.values, gotValues); diff != "" {
 			t.Error(diff)
 		}

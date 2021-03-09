@@ -464,7 +464,13 @@ func ParseYesNoOnly(s string) YesNoOnly {
 
 func ContainsRefGlobs(q Q) bool {
 	containsRefGlobs := false
-	if repoFilterValues, _ := q.RegexpPatterns(FieldRepo); len(repoFilterValues) > 0 {
+	var repoFilterValues []string
+	VisitField(q, FieldRepo, func(value string, negated bool, _ Annotation) {
+		if !negated {
+			repoFilterValues = append(repoFilterValues, value)
+		}
+	})
+	if len(repoFilterValues) > 0 {
 		for _, v := range repoFilterValues {
 			repoRev := strings.SplitN(v, "@", 2)
 			if len(repoRev) == 1 { // no revision

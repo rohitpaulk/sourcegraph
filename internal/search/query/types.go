@@ -53,6 +53,8 @@ type Basic struct {
 	Parameters []Parameter
 }
 
+type AST []Basic
+
 // A query is a tree of Nodes. We choose the type name Q so that external uses like query.Q do not stutter.
 type Q []Node
 
@@ -60,8 +62,8 @@ func (q Q) String() string {
 	return toString(q)
 }
 
-func (q Q) RegexpPatterns(field string) (values, negatedValues []string) {
-	VisitField(q, field, func(visitedValue string, negated bool, _ Annotation) {
+func (q *Basic) RegexpPatterns(field string) (values, negatedValues []string) {
+	VisitField(basicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
 		if negated {
 			negatedValues = append(negatedValues, visitedValue)
 		} else {

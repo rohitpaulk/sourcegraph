@@ -1085,13 +1085,6 @@ func ProcessAndOr(in string, options ParserOptions) (Q, error) {
 			return nil, err
 		}
 	}
-
-	for _, disjunct := range Dnf(query) {
-		err = validate(disjunct)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return query, nil
 }
 
@@ -1101,4 +1094,21 @@ func ParseLiteral(in string) (Q, error) {
 
 func ParseRegexp(in string) (Q, error) {
 	return ProcessAndOr(in, ParserOptions{SearchType: SearchTypeRegex})
+}
+
+func toAst(query Q) (AST, error) {
+	var err error
+	var ast []Basic
+	for _, disjunct := range Dnf(query) {
+		err = validate(disjunct)
+		if err != nil {
+			return nil, err
+		}
+		basic, err := PartitionSearchPattern(disjunct)
+		if err != nil {
+			return nil, err
+		}
+		ast = append(ast, *basic)
+	}
+	return ast, nil
 }

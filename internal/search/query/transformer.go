@@ -289,6 +289,17 @@ func mapGlobToRegex(nodes []Node) ([]Node, error) {
 	return nodes, nil
 }
 
+// basicToParseTree converts a Basic query to its parse tree representation.
+func basicToParseTree(basic *Basic) (nodes []Node) {
+	for _, parameter := range basic.Parameters {
+		nodes = append(nodes, Node(parameter))
+	}
+	if basic.Pattern == nil {
+		return nodes
+	}
+	return append(nodes, basic.Pattern)
+}
+
 // Hoist is a heuristic that rewrites simple but possibly ambiguous queries. It
 // changes certain expressions in a way that some consider to be more natural.
 // For example, the following query without parentheses is interpreted as
@@ -324,12 +335,12 @@ func Hoist(nodes []Node) ([]Node, error) {
 		if i == 0 || i == n-1 {
 			basic, err := PartitionSearchPattern([]Node{node})
 			patternPart := basic.Pattern
+			if err != nil || patternPart == nil {
+				return nil, errors.New("could not partition first or last expression")
+			}
 			var scopePart []Node
 			for _, parameter := range basic.Parameters {
 				scopePart = append(scopePart, Node(parameter))
-			}
-			if err != nil || patternPart == nil {
-				return nil, errors.New("could not partition first or last expression")
 			}
 			pattern = append(pattern, patternPart)
 			scopeParameters = append(scopeParameters, scopePart...)
