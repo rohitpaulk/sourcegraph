@@ -1,0 +1,11 @@
+commands:
+  gitserver:
+    cmd: .bin/gitserver
+    install: go install github.com/sourcegraph/sourcegraph/cmd/gitserver -o .bin/gitserver
+    env:
+      HOSTNAME: $SRC_GIT_SERVER_1
+
+commandsets:
+  # This is the set that will be used when `sg start` is run:
+  default:
+    - gitserver
