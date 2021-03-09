@@ -1,78 +1,47 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"io/fs"
-	"path/filepath"
+	"regexp"
 
-	"github.com/fsnotify/fsnotify"
+	"github.com/rjeczalik/notify"
 
 	// TODO - deduplicate me
 	"github.com/sourcegraph/sourcegraph/dev/sg/root"
 )
 
-func watch(ctx context.Context, args []string) error {
-	watcher, err := fsnotify.NewWatcher()
+var watchIgnorePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`_test\.go$`),
+}
+
+func watch() (<-chan string, error) {
+	root, err := root.RepositoryRoot()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer watcher.Close()
 
-	done := make(chan struct{})
+	paths := make(chan string)
+	events := make(chan notify.EventInfo, 1)
+
+	if err := notify.Watch(root+"/...", events, notify.All); err != nil {
+		return nil, err
+	}
+
 	go func() {
-		defer close(done)
+		defer close(events)
+		defer notify.Stop(events)
 
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
+	outer:
+		for event := range events {
+			path := event.Path()
+			for _, pattern := range watchIgnorePatterns {
+				if pattern.MatchString(path) {
+					continue outer
 				}
-				fmt.Printf("> %v\n", event)
-
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-
-				// TODO - return instead
-				panic(err.Error())
 			}
+
+			paths <- path
 		}
 	}()
 
-	root, err := root.RepositoryRoot()
-	if err != nil {
-		return err
-	}
-
-	i := 0
-	if err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
-		// if err != nil {
-		// 	return err
-		// }
-
-		// if info.Name() == ".git" || info.Name() == "node_modules" {
-		// 	return filepath.SkipDir
-		// }
-
-		if !info.Mode().IsDir() {
-			return nil
-		}
-
-		i++
-		if err := watcher.Add(path); err != nil {
-			fmt.Printf("> %s (%d) -> %+v\n", path, i, err)
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		fmt.Printf("WOT\n")
-		return err
-	}
-
-	<-done
-	return nil
+	return paths, nil
 }

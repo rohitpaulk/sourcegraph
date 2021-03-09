@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -19,7 +20,18 @@ var watchCommand = &ffcli.Command{
 	ShortUsage: "sg watch <arg>",
 	ShortHelp:  "Watch changes to the repository.",
 	FlagSet:    watchFlagSet,
-	Exec:       watch,
+	Exec: func(ctx context.Context, args []string) error {
+		paths, err := watch()
+		if err != nil {
+			return err
+		}
+
+		for path := range paths {
+			fmt.Printf("SOMETHING CHANGED: %v\n", path)
+		}
+
+		return nil
+	},
 }
 
 var rootCommand = &ffcli.Command{
