@@ -1,23 +1,26 @@
+env:
+  SRC_REPOS_DIR: $HOME/.sourcegraph/repos
+
 commands:
   gitserver:
     cmd: .bin/gitserver
-    install: go install github.com/sourcegraph/sourcegraph/cmd/gitserver -o .bin/gitserver
+    install: go build -o .bin/gitserver github.com/sourcegraph/sourcegraph/cmd/gitserver
     env:
       HOSTNAME: $SRC_GIT_SERVER_1
 
   enterprise-gitserver:
     cmd: .bin/gitserver
-    install: go install github.com/sourcegraph/sourcegraph/enterprise/cmd/gitserver -o .bin/gitserver
+    install: go build -o .bin/gitserver github.com/sourcegraph/sourcegraph/enterprise/cmd/gitserver
     env:
       HOSTNAME: $SRC_GIT_SERVER_1
 
   query-runner:
     cmd: .bin/query-runner
-    install: go install github.com/sourcegraph/sourcegraph/cmd/query-runner -o .bin/gitserver
+    install: go build -o .bin/query-runner github.com/sourcegraph/sourcegraph/cmd/query-runner
 
   searcher:
     cmd: .bin/searcher
-    install: go install github.com/sourcegraph/sourcegraph/cmd/searcher -o .bin/gitserver
+    install: go build -o .bin/searcher github.com/sourcegraph/sourcegraph/cmd/searcher
 
   caddy:
     install_doc.darwin: "use brew install"

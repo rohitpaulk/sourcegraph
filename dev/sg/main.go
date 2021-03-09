@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
+	"github.com/sourcegraph/sourcegraph/dev/sg/root"
 )
 
 var (
@@ -15,6 +18,8 @@ var (
 	configFlag  = rootFlagSet.String("config", "sg.config.yaml", "configuration file")
 
 	watchFlagSet = flag.NewFlagSet("sg watch", flag.ExitOnError)
+
+	runFlagSet = flag.NewFlagSet("sg run", flag.ExitOnError)
 )
 
 var watchCommand = &ffcli.Command{
@@ -36,18 +41,58 @@ var watchCommand = &ffcli.Command{
 	},
 }
 
-var rootCommand = &ffcli.Command{
-	ShortUsage:  "sg [flags] <subcommand>",
-	FlagSet:     rootFlagSet,
-	Subcommands: []*ffcli.Command{watchCommand},
+var runCommand = &ffcli.Command{
+	Name:       "run",
+	ShortUsage: "sg run <command>",
+	ShortHelp:  "Watch changes to the repository.",
+	FlagSet:    watchFlagSet,
 	Exec: func(ctx context.Context, args []string) error {
-		conf, err := ParseConfigFile(*configFlag)
+		if len(args) != 1 {
+			return errors.New("whoops, only one command")
+		}
+
+		cmd, ok := conf.Commands[args[0]]
+		if !ok {
+			return fmt.Errorf("command %q not found", args[0])
+		}
+
+		root, err := root.RepositoryRoot()
 		if err != nil {
 			return err
 		}
-		fmt.Printf("conf: %+v\n", conf)
+
+		// Build it
+		c := exec.CommandContext(ctx, "bash", "-c", cmd.Install)
+		c.Dir = root
+		c.Env = os.Environ()
+		for k, v := range conf.Env {
+			c.Env = append(c.Env, fmt.Sprintf("%s=%s", k, v))
+		}
+		out, err := c.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to install %q: %s (output: %s)", args[0], err, out)
+		}
+
+		// Run it
+		c = exec.CommandContext(ctx, "bash", "-c", cmd.Cmd)
+		c.Dir = root
+		c.Env = os.Environ()
+		for k, v := range conf.Env {
+			c.Env = append(c.Env, fmt.Sprintf("%s=%s", k, v))
+		}
+		out, err = c.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to install %q: %s. output:\n%s", args[0], err, out)
+		}
+
 		return nil
 	},
+}
+
+var rootCommand = &ffcli.Command{
+	ShortUsage:  "sg [flags] <subcommand>",
+	FlagSet:     rootFlagSet,
+	Subcommands: []*ffcli.Command{watchCommand, runCommand},
 }
 
 var conf *Config
