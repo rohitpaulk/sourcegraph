@@ -796,7 +796,7 @@ func (r *searchResolver) evaluateOperator(ctx context.Context, scopeParameters [
 // setQuery sets a new query in the search resolver, for potentially repeated
 // calls in the search pipeline. The important part is it takes care of
 // invalidating cached repo info.
-func (r *searchResolver) setQuery(q []query.Node) {
+func (r *searchResolver) setQuery(q []query.Basic) {
 	if r.invalidateRepoCache {
 		r.resolved.RepoRevs = nil
 		r.resolved.MissingRepoRevs = nil
@@ -828,15 +828,15 @@ func (r *searchResolver) evaluatePatternExpression(ctx context.Context, scopePar
 
 // evaluate evaluates all expressions of a search query.
 func (r *searchResolver) evaluate(ctx context.Context, q query.Q) (*SearchResultsResolver, error) {
-	scopeParameters, pattern, err := query.PartitionSearchPattern(q)
+	basic, err := query.PartitionSearchPattern(q)
 	if err != nil {
 		return alertForQuery(r.db, "", err).wrap(), nil
 	}
-	if pattern == nil {
-		r.setQuery(scopeParameters)
+	if basic.Pattern == nil {
+		r.setQuery(basic.Parameters)
 		return r.evaluateLeaf(ctx)
 	}
-	return r.evaluatePatternExpression(ctx, scopeParameters, pattern)
+	return r.evaluatePatternExpression(ctx, basic.Parameters, basic.Pattern)
 }
 
 // invalidateRepoCache returns whether resolved repos should be invalidated when

@@ -322,7 +322,12 @@ func Hoist(nodes []Node) ([]Node, error) {
 	var scopeParameters []Node
 	for i, node := range expression.Operands {
 		if i == 0 || i == n-1 {
-			scopePart, patternPart, err := PartitionSearchPattern([]Node{node})
+			basic, err := PartitionSearchPattern([]Node{node})
+			patternPart := basic.Pattern
+			var scopePart []Node
+			for _, parameter := range basic.Parameters {
+				scopePart = append(scopePart, Node(parameter))
+			}
 			if err != nil || patternPart == nil {
 				return nil, errors.New("could not partition first or last expression")
 			}

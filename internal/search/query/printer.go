@@ -37,19 +37,17 @@ func stringHumanPattern(nodes []Node) string {
 	return strings.Join(result, "")
 }
 
-func stringHumanParameters(nodes []Node) string {
+func stringHumanParameters(nodes []Parameter) string {
 	var result []string
-	for _, node := range nodes {
-		if n, ok := node.(Parameter); ok {
-			v := n.Value
-			if n.Annotation.Labels.isSet(Quoted) {
-				v = strconv.Quote(v)
-			}
-			if n.Negated {
-				return fmt.Sprintf("-%s:%s", n.Field, v)
-			}
-			result = append(result, fmt.Sprintf("%s:%s", n.Field, v))
+	for _, n := range nodes {
+		v := n.Value
+		if n.Annotation.Labels.isSet(Quoted) {
+			v = strconv.Quote(v)
 		}
+		if n.Negated {
+			return fmt.Sprintf("-%s:%s", n.Field, v)
+		}
+		result = append(result, fmt.Sprintf("%s:%s", n.Field, v))
 	}
 	return strings.Join(result, " ")
 }
@@ -69,7 +67,7 @@ func stringHumanParameters(nodes []Node) string {
 // additional 'and' operators may be inserted to segment parameters
 // from patterns to preserve the original meaning.
 func StringHuman(nodes []Node) string {
-	parameters, pattern, err := PartitionSearchPattern(nodes)
+	basic, err := PartitionSearchPattern(nodes)
 	if err != nil {
 		// We couldn't partition at this level in the tree, so recurse on operators until we can.
 		var v []string
@@ -88,13 +86,13 @@ func StringHuman(nodes []Node) string {
 		}
 		return strings.Join(v, "")
 	}
-	if pattern == nil {
-		return stringHumanParameters(parameters)
+	if basic.Pattern == nil {
+		return stringHumanParameters(basic.Parameters)
 	}
-	if len(parameters) == 0 {
-		return stringHumanPattern([]Node{pattern})
+	if len(basic.Parameters) == 0 {
+		return stringHumanPattern([]Node{basic.Pattern})
 	}
-	return stringHumanParameters(parameters) + " " + stringHumanPattern([]Node{pattern})
+	return stringHumanParameters(basic.Parameters) + " " + stringHumanPattern([]Node{basic.Pattern})
 }
 
 // toString returns a string representation of a query's structure.
@@ -102,6 +100,18 @@ func toString(nodes []Node) string {
 	var result []string
 	for _, node := range nodes {
 		result = append(result, node.String())
+	}
+	return strings.Join(result, " ")
+}
+
+// toString returns a string representation of a Basic query's structure.
+func toStringBasic(basic *Basic) string {
+	var result []string
+	for _, node := range basic.Parameters {
+		result = append(result, node.String())
+	}
+	if basic.Pattern != nil {
+		result = append(result, basic.Pattern.String())
 	}
 	return strings.Join(result, " ")
 }

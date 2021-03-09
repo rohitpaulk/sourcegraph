@@ -44,6 +44,15 @@ type QueryInfo interface {
 	IsCaseSensitive() bool
 }
 
+// Basic represents a leaf expression that we can evaluate in our search engine.
+// A basic query comprises (1) a single search pattern expression and (2)
+// parameters that scope the evaluation of search patterns (e.g., to repos,
+// files, etc.).
+type Basic struct {
+	Pattern    Node
+	Parameters []Parameter
+}
+
 // A query is a tree of Nodes. We choose the type name Q so that external uses like query.Q do not stutter.
 type Q []Node
 

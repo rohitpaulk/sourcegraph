@@ -101,36 +101,38 @@ func processTopLevel(nodes []Node) ([]Node, error) {
 	return nodes, nil
 }
 
-// PartitionSearchPattern partitions an and/or query into (1) a single search
-// pattern expression and (2) other parameters that scope the evaluation of
-// search patterns (e.g., to repos, files, etc.). It validates that a query
-// contains at most one search pattern expression and that scope parameters do
-// not contain nested expressions.
-func PartitionSearchPattern(nodes []Node) (parameters []Node, pattern Node, err error) {
+// PartitionSearchPattern converts a parse tree into a Basic query. It validates
+// that a query contains at most one search pattern expression and that scope
+// parameters do not contain nested expressions.
+func PartitionSearchPattern(nodes []Node) (*Basic, error) {
+	var err error
 	if len(nodes) == 1 {
 		nodes, err = processTopLevel(nodes)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
 	var patterns []Node
+	var parameters []Parameter
 	for _, node := range nodes {
 		if isPatternExpression([]Node{node}) {
 			patterns = append(patterns, node)
 		} else if term, ok := node.(Parameter); ok {
 			parameters = append(parameters, term)
 		} else {
-			return nil, nil, &UnsupportedError{Msg: "cannot evaluate: unable to partition pure search pattern"}
+			return nil, &UnsupportedError{Msg: "cannot evaluate: unable to partition pure search pattern"}
 		}
 	}
+
+	var pattern Node
 	if len(patterns) > 1 {
 		pattern = Operator{Kind: And, Operands: patterns}
 	} else if len(patterns) == 1 {
 		pattern = patterns[0]
 	}
 
-	return parameters, pattern, nil
+	return &Basic{Parameters: parameters, Pattern: pattern}, nil
 }
 
 // parseBool is like strconv.ParseBool except that it also accepts y, Y, yes,

@@ -252,18 +252,14 @@ func TestPartitionSearchPattern(t *testing.T) {
 	for _, tt := range cases {
 		t.Run("partition search pattern", func(t *testing.T) {
 			q, _ := ParseAndOr(tt.input, SearchTypeRegex)
-			scopeParameters, pattern, err := PartitionSearchPattern(q)
+			result, err := PartitionSearchPattern(q)
 			if err != nil {
 				if diff := cmp.Diff(tt.want, err.Error()); diff != "" {
 					t.Fatal(diff)
 				}
 				return
 			}
-			result := scopeParameters
-			if pattern != nil {
-				result = append(scopeParameters, pattern)
-			}
-			got := toString(result)
+			got := toStringBasic(result)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Error(diff)
 			}

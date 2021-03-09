@@ -143,13 +143,14 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 	return &searchResolver{
 		db: db,
 		SearchInputs: &SearchInputs{
-			Query:          q,
-			OriginalQuery:  args.Query,
-			VersionContext: args.VersionContext,
-			UserSettings:   settings,
-			Pagination:     pagination,
-			PatternType:    searchType,
-			DefaultLimit:   defaultLimit,
+			BasicQuery:      nil, // To be set based on evaluation of ExpressionQuery
+			ExpressionQuery: q,
+			OriginalQuery:   args.Query,
+			VersionContext:  args.VersionContext,
+			UserSettings:    settings,
+			Pagination:      pagination,
+			PatternType:     searchType,
+			DefaultLimit:    defaultLimit,
 		},
 
 		stream: args.Stream,
@@ -268,12 +269,13 @@ func getBoolPtr(b *bool, def bool) bool {
 
 // SearchInputs contains fields we set before kicking off search.
 type SearchInputs struct {
-	Query          query.Q               // the query
-	OriginalQuery  string                // the raw string of the original search query
-	Pagination     *searchPaginationInfo // pagination information, or nil if the request is not paginated.
-	PatternType    query.SearchType
-	VersionContext *string
-	UserSettings   *schema.Settings
+	BasicQuery      *query.Basic          // the current query under evaluation, a leaf node of ExpressionQuery
+	ExpressionQuery query.Q               // the entire query expression tree
+	OriginalQuery   string                // the raw string of the original search query
+	Pagination      *searchPaginationInfo // pagination information, or nil if the request is not paginated.
+	PatternType     query.SearchType
+	VersionContext  *string
+	UserSettings    *schema.Settings
 
 	// DefaultLimit is the default limit to use if not specified in query.
 	DefaultLimit int
@@ -309,8 +311,8 @@ func (r *searchResolver) rawQuery() string {
 }
 
 func (r *searchResolver) countIsSet() bool {
-	count := r.Query.Count()
-	max, _ := r.Query.StringValues(query.FieldMax)
+	count := r.BasicQuery.Count()
+	max, _ := r.BasicQuery.StringValues(query.FieldMax)
 	return count != nil || len(max) > 0
 }
 
@@ -327,15 +329,15 @@ func (inputs SearchInputs) MaxResults() int {
 		return math.MaxInt32
 	}
 
-	if inputs.Query == nil {
+	if inputs.BasicQuery == nil {
 		return 0
 	}
 
-	if count := inputs.Query.Count(); count != nil {
+	if count := inputs.BasicQuery.Count(); count != nil {
 		return *count
 	}
 
-	max, _ := inputs.Query.StringValues(query.FieldMax)
+	max, _ := inputs.BasicQuery.StringValues(query.FieldMax)
 	if len(max) > 0 {
 		n, _ := strconv.Atoi(max[0])
 		if n > 0 {
@@ -400,11 +402,11 @@ func (r *searchResolver) resolveRepositories(ctx context.Context, effectiveRepoF
 		}
 	}
 
-	repoFilters, minusRepoFilters := r.Query.RegexpPatterns(query.FieldRepo)
+	repoFilters, minusRepoFilters := r.BasicQuery.RegexpPatterns(query.FieldRepo)
 	if effectiveRepoFieldValues != nil {
 		repoFilters = effectiveRepoFieldValues
 	}
-	repoGroupFilters, _ := r.Query.StringValues(query.FieldRepoGroup)
+	repoGroupFilters, _ := r.BasicQuery.StringValues(query.FieldRepoGroup)
 
 	var settingForks, settingArchived bool
 	if v := r.UserSettings.SearchIncludeForks; v != nil {
@@ -414,7 +416,7 @@ func (r *searchResolver) resolveRepositories(ctx context.Context, effectiveRepoF
 		settingArchived = *v
 	}
 
-	forkStr, _ := r.Query.StringValue(query.FieldFork)
+	forkStr, _ := r.BasicQuery.StringValue(query.FieldFork)
 	fork := query.ParseYesNoOnly(forkStr)
 	if fork == query.Invalid && !searchrepos.ExactlyOneRepo(repoFilters) && !settingForks {
 		// fork defaults to No unless either of:
@@ -430,15 +432,15 @@ func (r *searchResolver) resolveRepositories(ctx context.Context, effectiveRepoF
 		// (2) user/org/global setting includes archives in all searches
 		archived = query.Yes
 	}
-	if setArchived := r.Query.Archived(); setArchived != nil {
+	if setArchived := r.BasicQuery.Archived(); setArchived != nil {
 		archived = *setArchived
 	}
 
-	visibilityStr, _ := r.Query.StringValue(query.FieldVisibility)
+	visibilityStr, _ := r.BasicQuery.StringValue(query.FieldVisibility)
 	visibility := query.ParseVisibility(visibilityStr)
 
-	commitAfter, _ := r.Query.StringValue(query.FieldRepoHasCommitAfter)
-	searchContextSpec, _ := r.Query.StringValue(query.FieldContext)
+	commitAfter, _ := r.BasicQuery.StringValue(query.FieldRepoHasCommitAfter)
+	searchContextSpec, _ := r.BasicQuery.StringValue(query.FieldContext)
 
 	var versionContextName string
 	if r.VersionContext != nil {
@@ -460,7 +462,7 @@ func (r *searchResolver) resolveRepositories(ctx context.Context, effectiveRepoF
 		OnlyPrivate:        visibility == query.Private,
 		OnlyPublic:         visibility == query.Public,
 		CommitAfter:        commitAfter,
-		Query:              r.Query,
+		Query:              r.BasicQuery,
 	}
 	repositoryResolver := &searchrepos.Resolver{Zoekt: r.zoekt, DefaultReposFunc: database.GlobalDefaultRepos.List, NamespaceStore: database.Namespaces(r.db)}
 	resolved, err := repositoryResolver.Resolve(ctx, options)
@@ -492,7 +494,7 @@ func (r *searchResolver) suggestFilePaths(ctx context.Context, limit int) ([]Sea
 	args := search.TextParameters{
 		PatternInfo:     p,
 		RepoPromise:     (&search.Promise{}).Resolve(resolved.RepoRevs),
-		Query:           r.Query,
+		Query:           r.BasicQuery,
 		UseFullDeadline: r.searchTimeoutFieldSet(),
 		Zoekt:           r.zoekt,
 		SearcherURLs:    r.searcherURLs,
