@@ -24,10 +24,17 @@ func ParseConfigFile(name string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &conf); err != nil {
 		return nil, err
 	}
+
+	for name, cmd := range conf.Commands {
+		cmd.Name = name
+		conf.Commands[name] = cmd
+	}
+
 	return &conf, nil
 }
 
 type Command struct {
+	Name             string
 	Cmd              string            `yaml:"cmd"`
 	Install          string            `yaml:"install"`
 	Env              map[string]string `yaml:"env"`

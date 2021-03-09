@@ -12,10 +12,14 @@ commands:
       - cmd/gitserver
 
   enterprise-gitserver:
-    cmd: .bin/gitserver
-    install: go build -o .bin/gitserver github.com/sourcegraph/sourcegraph/enterprise/cmd/gitserver
+    cmd: .bin/repo-updater
+    install: go build -o .bin/repo-updater github.com/sourcegraph/sourcegraph/enterprise/cmd/repo-updater
     env:
       HOSTNAME: $SRC_GIT_SERVER_1
+    watch:
+      - internal
+      - cmd/gitserver
+      - enterprise/cmd/repo-updater
 
   query-runner:
     cmd: .bin/query-runner
@@ -36,6 +40,10 @@ commands:
   # [...]
 
 commandsets:
+  gitservers:
+    - gitserver
+    - enterprise-gitserver
+
   # This is the set that will be used when `sg start` is run:
   default:
     - gitserver
