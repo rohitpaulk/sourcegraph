@@ -1,0 +1,91 @@
+commands:
+  gitserver:
+    cmd: .bin/gitserver
+    install: go install github.com/sourcegraph/sourcegraph/cmd/gitserver -o .bin/gitserver
+    env:
+      HOSTNAME: $SRC_GIT_SERVER_1
+
+  enterprise-gitserver:
+    cmd: .bin/gitserver
+    install: go install github.com/sourcegraph/sourcegraph/enterprise/cmd/gitserver -o .bin/gitserver
+    env:
+      HOSTNAME: $SRC_GIT_SERVER_1
+
+  query-runner:
+    cmd: .bin/query-runner
+    install: go install github.com/sourcegraph/sourcegraph/cmd/query-runner -o .bin/gitserver
+
+  searcher:
+    cmd: .bin/searcher
+    install: go install github.com/sourcegraph/sourcegraph/cmd/searcher -o .bin/gitserver
+
+  caddy:
+    install_doc.darwin: "use brew install"
+    install_doc.linux: "use apt install"
+
+  web:
+    cmd: ./node_modules/.bin/gulp --silent --color dev
+    install: yarn install
+
+  # [...]
+
+commandsets:
+  # This is the set that will be used when `sg start` is run:
+  default:
+    - gitserver
+    - query-runner
+    - repo-updater
+    - searcher
+    - symbols
+    - github-proxy
+    - frontend
+    - watch
+    - caddy
+    - web
+    - syntect_server
+    - zoekt-indexserver-0
+    - zoekt-indexserver-1
+    - zoekt-webserver-0
+    - zoekt-webserver-1
+  # Another set that can be run with `sg run-set monitoring`:
+  monitoring:
+    - jaeger
+    - docsite
+    - prometheus
+    - grafana
+    - postgres_exporter
+  enterprise:
+    - enterprise-gitserver
+    - enterprise-query-runner
+    - enterprise-repo-updater
+    - enterprise-frontend
+    - searcher
+    - symbols
+    - github-proxy
+    - watch
+    - caddy
+    - web
+    - syntect_server
+    - zoekt-indexserver-0
+    - zoekt-indexserver-1
+    - zoekt-webserver-0
+    - zoekt-webserver-1
+
+tests:
+  # These can be run with `sg test [name]`
+  backend:
+    cmd: go test ./...
+  backend-integration:
+    cmd: go test -long -base-url $BASE_URL -email $EMAIL -username $USERNAME -password $PASSWORD
+    env:
+      # These are defaults. They can be overwritten by setting the env vars when
+      # running the command.
+      BASE_URL: "http://localhost:3080"
+      EMAIL: "joe@sourcegraph.com"
+      PASSWORD: "12345"
+  frontend:
+    cmd: yarn run jest --testPathIgnorePatterns end-to-end regression integration storybook
+  frontend-e2e:
+    cmd: yarn run mocha ./client/web/src/end-to-end/end-to-end.test.ts
+    env:
+      TS_NODE_PROJECT: client/web/src/end-to-end/tsconfig.json
