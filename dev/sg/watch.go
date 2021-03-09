@@ -12,6 +12,7 @@ import (
 var watchIgnorePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`_test\.go$`),
 	regexp.MustCompile(`^dev/`),
+	regexp.MustCompile(`^.git/`),
 	regexp.MustCompile(`^node_modules/`),
 }
 
