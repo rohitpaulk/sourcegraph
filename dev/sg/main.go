@@ -10,41 +10,26 @@ import (
 )
 
 var (
-	rootFlagSet   = flag.NewFlagSet("textctl", flag.ExitOnError)
-	verbose       = rootFlagSet.Bool("v", false, "increase log verbosity")
-	repeatFlagSet = flag.NewFlagSet("textctl repeat", flag.ExitOnError)
-	n             = repeatFlagSet.Int("n", 3, "how many times to repeat")
+	rootFlagSet  = flag.NewFlagSet("sg", flag.ExitOnError)
+	watchFlagSet = flag.NewFlagSet("sg watch", flag.ExitOnError)
 )
 
-var repeat = &ffcli.Command{
-	Name:       "repeat",
-	ShortUsage: "textctl repeat [-n times] <arg>",
-	ShortHelp:  "Repeatedly print the argument to stdout.",
-	FlagSet:    repeatFlagSet,
-	Exec: func(_ context.Context, args []string) error {
-		// foo
-		return nil
-	},
+var watchCommand = &ffcli.Command{
+	Name:       "watch",
+	ShortUsage: "sg watch <arg>",
+	ShortHelp:  "Watch changes to the repository.",
+	FlagSet:    watchFlagSet,
+	Exec:       watch,
 }
 
-var count = &ffcli.Command{
-	Name:       "count",
-	ShortUsage: "textctl count [<arg> ...]",
-	ShortHelp:  "Count the number of bytes in the arguments.",
-	Exec: func(_ context.Context, args []string) error {
-		// foo
-		return nil
-	},
-}
-
-var root = &ffcli.Command{
-	ShortUsage:  "textctl [flags] <subcommand>",
+var rootCommand = &ffcli.Command{
+	ShortUsage:  "sg [flags] <subcommand>",
 	FlagSet:     rootFlagSet,
-	Subcommands: []*ffcli.Command{repeat, count},
+	Subcommands: []*ffcli.Command{watchCommand},
 }
 
 func main() {
-	if err := root.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
+	if err := rootCommand.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
 }
