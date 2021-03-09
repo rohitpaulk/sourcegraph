@@ -2,6 +2,7 @@ package main
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/rjeczalik/notify"
 
@@ -35,7 +36,8 @@ func watch() (<-chan string, error) {
 
 	outer:
 		for event := range events {
-			path := event.Path()
+			path := strings.TrimPrefix(strings.TrimPrefix(event.Path(), root), "/")
+
 			for _, pattern := range watchIgnorePatterns {
 				if pattern.MatchString(path) {
 					continue outer
