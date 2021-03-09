@@ -10,6 +10,7 @@ import (
 	"os/exec"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
+
 	"github.com/sourcegraph/sourcegraph/dev/sg/root"
 )
 
@@ -64,10 +65,7 @@ var runCommand = &ffcli.Command{
 		// Build it
 		c := exec.CommandContext(ctx, "bash", "-c", cmd.Install)
 		c.Dir = root
-		c.Env = os.Environ()
-		for k, v := range conf.Env {
-			c.Env = append(c.Env, fmt.Sprintf("%s=%s", k, v))
-		}
+		c.Env = makeEnv(conf.Env, cmd.Env)
 		out, err := c.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to install %q: %s (output: %s)", args[0], err, out)
@@ -76,10 +74,7 @@ var runCommand = &ffcli.Command{
 		// Run it
 		c = exec.CommandContext(ctx, "bash", "-c", cmd.Cmd)
 		c.Dir = root
-		c.Env = os.Environ()
-		for k, v := range conf.Env {
-			c.Env = append(c.Env, fmt.Sprintf("%s=%s", k, v))
-		}
+		c.Env = makeEnv(conf.Env, cmd.Env)
 		out, err = c.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to install %q: %s. output:\n%s", args[0], err, out)
@@ -87,6 +82,15 @@ var runCommand = &ffcli.Command{
 
 		return nil
 	},
+}
+
+func makeEnv(envs ...map[string]string) []string {
+	env := os.Environ()
+	for k, v := range env {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	return env
 }
 
 var rootCommand = &ffcli.Command{
