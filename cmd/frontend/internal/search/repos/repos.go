@@ -290,7 +290,7 @@ type Options struct {
 	CommitAfter        string
 	OnlyPrivate        bool
 	OnlyPublic         bool
-	Query              query.Q
+	Query              *query.Basic
 }
 
 func (op *Options) String() string {
@@ -430,7 +430,7 @@ type ExcludedRepos struct {
 
 // computeExcludedRepositories returns a list of excluded repositories (Forks or
 // archives) based on the search Query.
-func computeExcludedRepositories(ctx context.Context, q query.Q, op database.ReposListOptions) (excluded ExcludedRepos) {
+func computeExcludedRepositories(ctx context.Context, q *query.Basic, op database.ReposListOptions) (excluded ExcludedRepos) {
 	if q == nil {
 		return ExcludedRepos{}
 	}

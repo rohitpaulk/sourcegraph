@@ -73,8 +73,8 @@ func (q *Basic) RegexpPatterns(field string) (values, negatedValues []string) {
 	return values, negatedValues
 }
 
-func (q Q) StringValues(field string) (values, negatedValues []string) {
-	VisitField(q, field, func(visitedValue string, negated bool, _ Annotation) {
+func (q *Basic) StringValues(field string) (values, negatedValues []string) {
+	VisitField(basicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
 		if negated {
 			negatedValues = append(negatedValues, visitedValue)
 		} else {
@@ -84,8 +84,8 @@ func (q Q) StringValues(field string) (values, negatedValues []string) {
 	return values, negatedValues
 }
 
-func (q Q) StringValue(field string) (value, negatedValue string) {
-	VisitField(q, field, func(visitedValue string, negated bool, _ Annotation) {
+func (q *Basic) StringValue(field string) (value, negatedValue string) {
+	VisitField(basicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
 		if negated {
 			negatedValue = visitedValue
 		} else {
@@ -95,42 +95,44 @@ func (q Q) StringValue(field string) (value, negatedValue string) {
 	return value, negatedValue
 }
 
-func (q Q) Values(field string) []*Value {
+func (q *Basic) Values(field string) []*Value {
 	var values []*Value
+	nodes := basicToParseTree(q)
 	if field == "" {
-		VisitPattern(q, func(value string, _ bool, annotation Annotation) {
-			values = append(values, q.valueToTypedValue(field, value, annotation.Labels)...)
+		VisitPattern(nodes, func(value string, _ bool, annotation Annotation) {
+			values = append(values, valueToTypedValue(field, value, annotation.Labels)...)
 		})
 	} else {
-		VisitField(q, field, func(value string, _ bool, _ Annotation) {
-			values = append(values, q.valueToTypedValue(field, value, None)...)
+		VisitField(nodes, field, func(value string, _ bool, _ Annotation) {
+			values = append(values, valueToTypedValue(field, value, None)...)
 		})
 	}
 	return values
 }
 
-func (q Q) Fields() map[string][]*Value {
+func (q *Basic) Fields() map[string][]*Value {
 	fields := make(map[string][]*Value)
-	VisitPattern(q, func(value string, _ bool, _ Annotation) {
+	nodes := basicToParseTree(q)
+	VisitPattern(nodes, func(value string, _ bool, _ Annotation) {
 		fields[""] = q.Values("")
 	})
-	VisitParameter(q, func(field, _ string, _ bool, _ Annotation) {
+	VisitParameter(nodes, func(field, _ string, _ bool, _ Annotation) {
 		fields[field] = q.Values(field)
 	})
 	return fields
 }
 
-func (q Q) BoolValue(field string) bool {
+func (q *Basic) BoolValue(field string) bool {
 	result := false
-	VisitField(q, field, func(value string, _ bool, _ Annotation) {
+	VisitField(basicToParseTree(q), field, func(value string, _ bool, _ Annotation) {
 		result, _ = parseBool(value) // err was checked during parsing and validation.
 	})
 	return result
 }
 
-func (q Q) Count() *int {
+func (q *Basic) Count() *int {
 	var count *int
-	VisitField(q, FieldCount, func(value string, _ bool, _ Annotation) {
+	VisitField(basicToParseTree(q), FieldCount, func(value string, _ bool, _ Annotation) {
 		c, err := strconv.Atoi(value)
 		if err != nil {
 			panic(fmt.Sprintf("Value %q for count cannot be parsed as an int: %s", value, err))
@@ -140,13 +142,13 @@ func (q Q) Count() *int {
 	return count
 }
 
-func (q Q) Archived() *YesNoOnly {
+func (q *Basic) Archived() *YesNoOnly {
 	return q.yesNoOnlyValue(FieldArchived)
 }
 
-func (q Q) yesNoOnlyValue(field string) *YesNoOnly {
+func (q *Basic) yesNoOnlyValue(field string) *YesNoOnly {
 	var res *YesNoOnly
-	VisitField(q, field, func(value string, _ bool, _ Annotation) {
+	VisitField(basicToParseTree(q), field, func(value string, _ bool, _ Annotation) {
 		yno := ParseYesNoOnly(value)
 		if yno == Invalid {
 			panic(fmt.Sprintf("Invalid value %q for field %q", value, field))
@@ -156,7 +158,7 @@ func (q Q) yesNoOnlyValue(field string) *YesNoOnly {
 	return res
 }
 
-func (q Q) IsCaseSensitive() bool {
+func (q *Basic) IsCaseSensitive() bool {
 	return q.BoolValue("case")
 }
 
@@ -172,7 +174,7 @@ func parseRegexpOrPanic(field, value string) *regexp.Regexp {
 // previous query processing. It does not check the validity of field negation
 // or if the same field is specified more than once. This role is now performed
 // by validate.go.
-func (q Q) valueToTypedValue(field, value string, label labels) []*Value {
+func valueToTypedValue(field, value string, label labels) []*Value {
 	switch field {
 	case
 		FieldDefault:

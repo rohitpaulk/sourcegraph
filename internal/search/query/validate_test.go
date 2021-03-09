@@ -136,11 +136,12 @@ func TestAndOrQuery_IsCaseSensitive(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			query, err := ProcessAndOr(c.input, ParserOptions{SearchTypeRegex, false})
+			nodes, _ := ProcessAndOr(c.input, ParserOptions{SearchTypeRegex, false})
+			query, err := toAst(nodes)
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := query.IsCaseSensitive()
+			got := query[0].IsCaseSensitive()
 			if got != c.want {
 				t.Errorf("got %v, want %v", got, c.want)
 			}
