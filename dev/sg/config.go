@@ -31,6 +31,7 @@ type Command struct {
 	Cmd              string            `yaml:"cmd"`
 	Install          string            `yaml:"install"`
 	Env              map[string]string `yaml:"env"`
+	Watch            []string          `yaml:"watch"`
 	InstallDocDarwin string            `yaml:"install_doc.darwin"`
 	InstallDocLinux  string            `yaml:"install_doc.linux"`
 }

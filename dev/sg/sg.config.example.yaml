@@ -7,6 +7,9 @@ commands:
     install: go build -o .bin/gitserver github.com/sourcegraph/sourcegraph/cmd/gitserver
     env:
       HOSTNAME: $SRC_GIT_SERVER_1
+    watch:
+      - internal
+      - cmd/gitserver
 
   enterprise-gitserver:
     cmd: .bin/gitserver
