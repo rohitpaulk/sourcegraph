@@ -1122,10 +1122,20 @@ func Pipeline(in string, options ParserOptions) (Plan, error) {
 	return plan, nil
 }
 
-// ToSingleQuery casts a plan of queries to a single query to evaluate if possible.
+// ToParseTree models a plan as a parse tree of an Or-expression on plan queries.
+func ToParseTree(p Plan) Q {
+	var nodes []Node
+	for _, q := range p {
+		nodes = append(nodes, Operator{Kind: And, Operands: q})
+	}
+	return Q(newOperator(nodes, Or))
+}
+
+// ToSingleQuery converts a plan of queries to a single query. If there are
+// multiple queries, it returns the first one.
 func ToSingleQuery(p Plan) Q {
-	if len(p) != 1 {
-		panic("Cast for plan query failed: multiple queries to evaluate")
+	if len(p) == 0 {
+		return []Node{}
 	}
 	return p[0]
 }
