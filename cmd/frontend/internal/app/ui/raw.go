@@ -84,6 +84,7 @@ func serveRaw(w http.ResponseWriter, r *http.Request) (err error) {
 		break
 	}
 
+	fmt.Println("milestone")
 	requestedPath := mux.Vars(r)["Path"]
 	if !strings.HasPrefix(requestedPath, "/") {
 		requestedPath = "/" + requestedPath
@@ -145,8 +146,8 @@ func serveRaw(w http.ResponseWriter, r *http.Request) (err error) {
 
 	switch contentType {
 	case applicationZip, applicationXTar:
-		// Set the proper filename field, so that downloading "/github.com/gorilla/mux/-/raw"
-		// gives us a "mux.zip" file (e.g. when downloading via a browser).
+		// Set the proper filename field, so that downloading "/github.com/gorilla/mux/-/raw" gives us a
+		// "mux.zip" file (e.g. when downloading via a browser) or a .tar file depending on the contentType.
 		ext := ".zip"
 		if contentType == applicationXTar {
 			ext = ".tar"
@@ -291,6 +292,7 @@ var metricRawDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 	Help:    "A histogram of latencies for the raw endpoint.",
 	Buckets: prometheus.ExponentialBuckets(.1, 5, 5), // 100ms -> 62s
 }, []string{"content", "type", "error"})
+
 var metricRawArchiveRunning = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Name: "src_frontend_http_raw_archive_running",
 	Help: "The number of concurrent raw archives being fetched.",
