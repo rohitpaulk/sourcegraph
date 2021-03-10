@@ -158,11 +158,20 @@ func runWatch(ctx context.Context, cmd Command, root string, reload <-chan struc
 
 func makeEnv(envs ...map[string]string) []string {
 	combined := os.Environ()
+
+	expandedEnv := map[string]string{}
+
 	for _, env := range envs {
 		for k, v := range env {
-			// TODO - should expand env variables that reference others?
-			// SRC_REPOS_DIR: $HOME/.sourcegraph/repos is a literal value today
-			combined = append(combined, fmt.Sprintf("%s=%s", k, v))
+			// Expand env vars and keep track of previously set env vars
+			// so they can be used when expanding too.
+			// TODO: using range to iterate over the env is not stable and thus
+			// this won't work
+			expanded := os.Expand(v, func(lookup string) string {
+				return env[lookup]
+			})
+			expandedEnv[k] = expanded
+			combined = append(combined, fmt.Sprintf("%s=%s", k, expanded))
 		}
 	}
 
