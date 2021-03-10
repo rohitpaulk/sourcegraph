@@ -125,6 +125,15 @@ commands:
       NODE_ENV: development
       NODE_OPTIONS: "--max_old_space_size=4096"
 
+  docsite:
+    cmd: .bin/docsite -config doc/docsite.json serve -http=localhost:5080
+    install: |
+      curl -sS -L -f \
+      "https://github.com/sourcegraph/docsite/releases/download/${VERSION}/docsite_${VERSION}_$(go env GOOS)_$(go env GOARCH)" \
+      -o .bin/docsite
+    env:
+      VERSION: v1.7.0
+
   # [...]
 
 commandsets:
