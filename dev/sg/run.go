@@ -168,7 +168,10 @@ func makeEnv(envs ...map[string]string) []string {
 			// TODO: using range to iterate over the env is not stable and thus
 			// this won't work
 			expanded := os.Expand(v, func(lookup string) string {
-				return env[lookup]
+				if e, ok := env[lookup]; ok {
+					return e
+				}
+				return os.Getenv(lookup)
 			})
 			expandedEnv[k] = expanded
 			combined = append(combined, fmt.Sprintf("%s=%s", k, expanded))

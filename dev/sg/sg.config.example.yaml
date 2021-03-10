@@ -2,9 +2,11 @@ env:
   SRC_REPOS_DIR: $HOME/.sourcegraph/repos
   SRC_LOG_LEVEL: info
   SRC_LOG_FORMAT: condensed
-  INSECURE_DEV: 1
   SRC_GIT_SERVER_1: 127.0.0.1:3178
   SRC_GIT_SERVERS: 127.0.0.1:3178
+
+  # Enable sharded indexed search mode:
+  INDEXED_SEARCH_SERVERS: localhost:3070 localhost:3071
 
   DEPLOY_TYPE: dev
 
@@ -25,20 +27,15 @@ env:
   PROMETHEUS_URL: http://localhost:9090
   JAEGER_SERVER_URL: http://localhost:16686
   ZOEKT_HOST: localhost:3070
-  # This needs to be empty?
-  SRC_PROF_HTTP: ""
+
+  SRC_PROF_HTTP: "" # This needs to be empty?
   OVERRIDE_AUTH_SECRET: sSsNGlI8fBDftBz0LDQNXEnP6lrWdt9g0fK6hoFvGQ
-  USE_ENHANCED_LANGUAGE_DETECTION: -1
-  # web
-  # PATH: $PWD/.bin:$PWD/node_modules/.bin:$PATH
-  # Enable sharded indexed search mode
-  # [ -n "${DISABLE_SEARCH_SHARDING-}" ] || export INDEXED_SEARCH_SERVERS="localhost:3070 localhost:3071"
-  # if [ -z "${DEV_NO_CONFIG-}" ]; then
+  USE_ENHANCED_LANGUAGE_DETECTION: false
+  # Settings/config
   SITE_CONFIG_FILE: ./dev/site-config.json
-  GLOBAL_SETTINGS_FILE: ./dev/global-settings.json
   SITE_CONFIG_ALLOW_EDITS: true
+  GLOBAL_SETTINGS_FILE: ./dev/global-settings.json
   GLOBAL_SETTINGS_ALLOW_EDITS: true
-# fi
 
 commands:
   frontend:
@@ -134,6 +131,16 @@ commands:
     env:
       VERSION: v1.7.0
 
+  syntect_server:
+    cmd: |
+      docker run --name=syntect_server --rm -p9238:9238 \
+      -e WORKERS=1 -e ROCKET_ADDRESS=0.0.0.0 \
+      sourcegraph/syntect_server:9089f98@sha256:83ff65809e6647b466bd400de4c438a32feeabe8e791b12e15c67c84529ad2de
+    install: docker inspect syntect_server >/dev/null 2>&1 && docker rm -f syntect_server || true
+    env:
+      # This is not needed actually
+      INSECURE_DEV: 1
+
   # [...]
 
 commandsets:
@@ -147,6 +154,7 @@ commandsets:
     - web
     - caddy
     - docsite
+    - syntect_server
 
   basic-enterprise:
     - enterprise-frontend
@@ -158,6 +166,7 @@ commandsets:
     - web
     - caddy
     - docsite
+    - syntect_server
 
   # This is the set that will be used when `sg start` is run:
   default:
