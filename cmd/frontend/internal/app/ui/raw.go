@@ -84,7 +84,6 @@ func serveRaw(w http.ResponseWriter, r *http.Request) (err error) {
 		break
 	}
 
-	fmt.Println("milestone")
 	requestedPath := mux.Vars(r)["Path"]
 	if !strings.HasPrefix(requestedPath, "/") {
 		requestedPath = "/" + requestedPath
