@@ -62,6 +62,19 @@ commands:
       - internal
       - cmd/gitserver
 
+  github-proxy:
+    cmd: .bin/github-proxy
+    install: go build -o .bin/github-proxy github.com/sourcegraph/sourcegraph/cmd/github-proxy
+    env:
+      HOSTNAME: 127.0.0.1:3178
+    watch:
+      - cmd/github-proxy
+      - internal/debugserver"
+      - internal/env
+      - internal/logging
+      - internal/trace
+      - internal/tracer
+
   repo-updater:
     cmd: .bin/repo-updater
     install: go build -o .bin/repo-updater github.com/sourcegraph/sourcegraph/cmd/repo-updater
@@ -128,7 +141,7 @@ commands:
     install: |
       curl -sS -L -f \
       "https://github.com/sourcegraph/docsite/releases/download/${VERSION}/docsite_${VERSION}_$(go env GOOS)_$(go env GOARCH)" \
-      -o .bin/docsite_${VERSION}
+      -o .bin/docsite_${VERSION} && chmod +x .bin/docsite_${VERSION}
     env:
       VERSION: v1.7.0
 
@@ -156,6 +169,7 @@ commandsets:
     - caddy
     - docsite
     - syntect_server
+    - github-proxy
 
   basic-enterprise:
     - enterprise-frontend
@@ -168,6 +182,7 @@ commandsets:
     - caddy
     - docsite
     - syntect_server
+    - github-proxy
 
   # This is the set that will be used when `sg start` is run:
   default:
