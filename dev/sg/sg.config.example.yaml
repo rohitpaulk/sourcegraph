@@ -11,11 +11,9 @@ env:
   DEPLOY_TYPE: dev
 
   SRC_HTTP_ADDR: ":3082"
-  SOURCEGRAPH_HTTPS_DOMAIN: sourcegraph.test
-  SOURCEGRAPH_HTTPS_PORT: 3443
 
-  GOLANGSERVER_SRC_GIT_SERVERS: host.docker.internal:3178
   GITHUB_BASE_URL: http://127.0.0.1:3180
+  # I don't think we even need to set these?
   SEARCHER_URL: http://127.0.0.1:3181
   REPO_UPDATER_URL: http://127.0.0.1:3182
   REDIS_ENDPOINT: 127.0.0.1:6379
@@ -30,7 +28,6 @@ env:
 
   SRC_PROF_HTTP: "" # This needs to be empty?
   OVERRIDE_AUTH_SECRET: sSsNGlI8fBDftBz0LDQNXEnP6lrWdt9g0fK6hoFvGQ
-  USE_ENHANCED_LANGUAGE_DETECTION: false
   # Settings/config
   SITE_CONFIG_FILE: ./dev/site-config.json
   SITE_CONFIG_ALLOW_EDITS: true
@@ -43,6 +40,7 @@ commands:
     install: go build -o .bin/frontend github.com/sourcegraph/sourcegraph/cmd/frontend
     env:
       CONFIGURATION_MODE: server
+      USE_ENHANCED_LANGUAGE_DETECTION: false
     watch:
       - internal
       - cmd/frontend
@@ -113,6 +111,9 @@ commands:
     cmd: .bin/caddy_2.3.0_mac_amd64 run --watch --config=dev/Caddyfile
     install_doc.darwin: "use brew install"
     install_doc.linux: "use apt install"
+    env:
+      SOURCEGRAPH_HTTPS_DOMAIN: sourcegraph.test
+      SOURCEGRAPH_HTTPS_PORT: 3443
 
   web:
     cmd: ./node_modules/.bin/gulp --silent --color dev
@@ -123,11 +124,11 @@ commands:
       NODE_OPTIONS: "--max_old_space_size=4096"
 
   docsite:
-    cmd: .bin/docsite -config doc/docsite.json serve -http=localhost:5080
+    cmd: .bin/docsite_${VERSION} -config doc/docsite.json serve -http=localhost:5080
     install: |
       curl -sS -L -f \
       "https://github.com/sourcegraph/docsite/releases/download/${VERSION}/docsite_${VERSION}_$(go env GOOS)_$(go env GOARCH)" \
-      -o .bin/docsite
+      -o .bin/docsite_${VERSION}
     env:
       VERSION: v1.7.0
 
