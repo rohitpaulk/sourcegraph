@@ -137,6 +137,7 @@ commandsets:
     - query-runner
     - web
     - caddy
+    - docsite
 
   basic-enterprise:
     - enterprise-frontend
@@ -147,6 +148,7 @@ commandsets:
     - query-runner
     - web
     - caddy
+    - docsite
 
   # This is the set that will be used when `sg start` is run:
   default:
@@ -165,31 +167,14 @@ commandsets:
     - zoekt-indexserver-1
     - zoekt-webserver-0
     - zoekt-webserver-1
+    - docsite
 
   # Another set that can be run with `sg run-set monitoring`:
   monitoring:
-    - jaeger
-    - docsite
-    - prometheus
-    - grafana
-    - postgres_exporter
-
-  enterprise:
-    - enterprise-gitserver
-    - enterprise-query-runner
-    - enterprise-repo-updater
-    - enterprise-frontend
-    - searcher
-    - symbols
-    - github-proxy
-    - watch
-    - caddy
-    - web
-    - syntect_server
-    - zoekt-indexserver-0
-    - zoekt-indexserver-1
-    - zoekt-webserver-0
-    - zoekt-webserver-1
+    # - jaeger
+    # - prometheus
+    # - grafana
+    # - postgres_exporter
 
 tests:
   # These can be run with `sg test [name]`
