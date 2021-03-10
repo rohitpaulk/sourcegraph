@@ -80,11 +80,12 @@ func runWatch(ctx context.Context, cmd Command, root string, reload <-chan struc
 		default:
 		}
 
-		//
 		// Run it
 		fmt.Printf("Running %s...\n", cmd.Name)
 
 		commandCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
 		c = exec.CommandContext(commandCtx, "bash", "-c", cmd.Cmd)
 		c.Dir = root
 		c.Env = makeEnv(conf.Env, cmd.Env)
@@ -140,6 +141,7 @@ func runWatch(ctx context.Context, cmd Command, root string, reload <-chan struc
 		for {
 			select {
 			case path := <-reload:
+				fmt.Printf("Change detected: %s\n", path)
 				fmt.Printf("Reloading %s...\n", cmd.Name)
 
 				cancel()    // Stop command
@@ -152,8 +154,6 @@ func runWatch(ctx context.Context, cmd Command, root string, reload <-chan struc
 			}
 		}
 	}
-
-	return nil
 }
 
 func makeEnv(envs ...map[string]string) []string {

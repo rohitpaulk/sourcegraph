@@ -35,7 +35,7 @@ var (
 )
 
 var (
-	runSetFlagSet = flag.NewFlagSet("sg run", flag.ExitOnError)
+	runSetFlagSet = flag.NewFlagSet("sg run-set", flag.ExitOnError)
 
 	runSetCommand = &ffcli.Command{
 		Name:       "run-set",
