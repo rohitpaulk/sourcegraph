@@ -24,7 +24,7 @@ func (TextParameters) typeParametersValue()    {}
 type CommitParameters struct {
 	RepoRevs           *RepositoryRevisions
 	PatternInfo        *CommitPatternInfo
-	Query              query.Q
+	Query              *query.Basic
 	Diff               bool
 	ExtraMessageValues []string
 }
@@ -134,7 +134,7 @@ type TextParameters struct {
 	// Query is the parsed query from the user. You should be using Pattern
 	// instead, but Query is useful for checking extra fields that are set and
 	// ignored by Pattern, such as index:no
-	Query query.Q
+	Query *query.Basic
 
 	// UseFullDeadline indicates that the search should try do as much work as
 	// it can within context.Deadline. If false the search should try and be
@@ -156,7 +156,7 @@ type TextParameters struct {
 type TextParametersForCommitParameters struct {
 	PatternInfo *CommitPatternInfo
 	Repos       []*RepositoryRevisions
-	Query       query.Q
+	Query       *query.Basic
 }
 
 // TextPatternInfo is the struct used by vscode pass on search queries. Keep it in

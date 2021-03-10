@@ -488,7 +488,7 @@ func ContainsRefGlobs(q Q) bool {
 
 func HasTypeRepo(q *Basic) bool {
 	found := false
-	VisitField(basicToParseTree(q), "type", func(value string, _ bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), "type", func(value string, _ bool, _ Annotation) {
 		if value == "repo" {
 			found = true
 		}

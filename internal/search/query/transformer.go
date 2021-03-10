@@ -289,8 +289,11 @@ func mapGlobToRegex(nodes []Node) ([]Node, error) {
 	return nodes, nil
 }
 
-// basicToParseTree converts a Basic query to its parse tree representation.
-func basicToParseTree(basic *Basic) (nodes []Node) {
+// BasicToParseTree converts a Basic query to its parse tree representation.
+func BasicToParseTree(basic *Basic) (nodes []Node) {
+	if basic == nil {
+		return []Node{}
+	}
 	for _, parameter := range basic.Parameters {
 		nodes = append(nodes, Node(parameter))
 	}
@@ -298,6 +301,14 @@ func basicToParseTree(basic *Basic) (nodes []Node) {
 		return nodes
 	}
 	return append(nodes, basic.Pattern)
+}
+
+// ToParseTree converst an AST into a parse tree.
+func ToParseTree(ast AST) (nodes []Node) {
+	for _, basic := range ast {
+		nodes = append(nodes, BasicToParseTree(basic)...)
+	}
+	return nodes
 }
 
 // Hoist is a heuristic that rewrites simple but possibly ambiguous queries. It

@@ -129,13 +129,13 @@ func (r *searchResolver) reposExist(ctx context.Context, options searchrepos.Opt
 func (r *searchResolver) alertForNoResolvedRepos(ctx context.Context) *searchAlert {
 	globbing := getBoolPtr(r.UserSettings.SearchGlobbing, false)
 
-	repoFilters, minusRepoFilters := r.Query.RegexpPatterns(query.FieldRepo)
-	repoGroupFilters, _ := r.Query.StringValues(query.FieldRepoGroup)
-	contextFilters, _ := r.Query.StringValues(query.FieldContext)
-	fork, _ := r.Query.StringValue(query.FieldFork)
+	repoFilters, minusRepoFilters := r.BasicQuery.RegexpPatterns(query.FieldRepo)
+	repoGroupFilters, _ := r.BasicQuery.StringValues(query.FieldRepoGroup)
+	contextFilters, _ := r.BasicQuery.StringValues(query.FieldContext)
+	fork, _ := r.BasicQuery.StringValue(query.FieldFork)
 	onlyForks, noForks := fork == "only", fork == "no"
 	forksNotSet := len(fork) == 0
-	archived := r.Query.Archived()
+	archived := r.BasicQuery.Archived()
 	archivedNotSet := archived == nil
 
 	// Handle repogroup-only scenarios.
@@ -164,7 +164,7 @@ func (r *searchResolver) alertForNoResolvedRepos(ctx context.Context) *searchAle
 		}
 	}
 	if len(contextFilters) == 1 && !searchcontexts.IsGlobalSearchContextSpec(contextFilters[0]) && (len(repoFilters) > 0 || len(repoGroupFilters) > 0) {
-		withoutContextFilter := query.OmitField(r.Query, query.FieldContext)
+		withoutContextFilter := query.OmitField(query.BasicToParseTree(r.BasicQuery), query.FieldContext)
 		proposedQueries := []*searchQueryDescription{{
 			description: "search in the global context",
 			query:       fmt.Sprintf("context:%s %s", searchcontexts.GlobalSearchContextName, withoutContextFilter),
@@ -181,7 +181,7 @@ func (r *searchResolver) alertForNoResolvedRepos(ctx context.Context) *searchAle
 
 	// TODO(sqs): handle -repo:foo fields.
 
-	withoutRepoFields := query.OmitField(r.Query, query.FieldRepo)
+	withoutRepoFields := query.OmitField(query.BasicToParseTree(r.BasicQuery), query.FieldRepo)
 
 	switch {
 	case len(repoGroupFilters) > 1:
@@ -213,7 +213,7 @@ func (r *searchResolver) alertForNoResolvedRepos(ctx context.Context) *searchAle
 			proposedQueries = []*searchQueryDescription{
 				{
 					description: fmt.Sprintf("include repositories outside of repogroup:%s", repoGroupFilters[0]),
-					query:       query.OmitField(r.Query, query.FieldRepoGroup),
+					query:       query.OmitField(query.BasicToParseTree(r.BasicQuery), query.FieldRepoGroup),
 					patternType: r.PatternType,
 				},
 			}
@@ -270,7 +270,7 @@ func (r *searchResolver) alertForNoResolvedRepos(ctx context.Context) *searchAle
 			proposedQueries = []*searchQueryDescription{
 				{
 					description: fmt.Sprintf("include repositories outside of repogroup:%s", repoGroupFilters[0]),
-					query:       query.OmitField(r.Query, query.FieldRepoGroup),
+					query:       query.OmitField(query.BasicToParseTree(r.BasicQuery), query.FieldRepoGroup),
 					patternType: r.PatternType,
 				},
 			}
@@ -487,7 +487,7 @@ func (r *searchResolver) alertForOverRepoLimit(ctx context.Context) *searchAlert
 				break
 			}
 			repoParentPattern := "^" + regexp.QuoteMeta(repoParent) + "/"
-			repoFieldValues, _ := r.Query.RegexpPatterns(query.FieldRepo)
+			repoFieldValues, _ := r.BasicQuery.RegexpPatterns(query.FieldRepo)
 
 			for _, v := range repoFieldValues {
 				if strings.HasPrefix(v, strings.TrimSuffix(repoParentPattern, "/")) {
@@ -513,7 +513,7 @@ func (r *searchResolver) alertForOverRepoLimit(ctx context.Context) *searchAlert
 			// add it to the user's query, but be smart. For example, if the user's
 			// query was "repo:foo" and the parent is "foobar/", then propose "repo:foobar/"
 			// not "repo:foo repo:foobar/" (which are equivalent, but shorter is better).
-			newExpr := query.AddRegexpField(r.Query, query.FieldRepo, repoParentPattern)
+			newExpr := query.AddRegexpField(query.BasicToParseTree(r.BasicQuery), query.FieldRepo, repoParentPattern)
 			proposedQueries = append(proposedQueries, &searchQueryDescription{
 				description: fmt.Sprintf("in repositories under %s %s", repoParent, more),
 				query:       newExpr,
@@ -532,7 +532,7 @@ func (r *searchResolver) alertForOverRepoLimit(ctx context.Context) *searchAlert
 				if i >= maxReposToPropose {
 					break
 				}
-				newExpr := query.AddRegexpField(r.Query, query.FieldRepo, "^"+regexp.QuoteMeta(pathToPropose)+"$")
+				newExpr := query.AddRegexpField(query.BasicToParseTree(r.BasicQuery), query.FieldRepo, "^"+regexp.QuoteMeta(pathToPropose)+"$")
 				proposedQueries = append(proposedQueries, &searchQueryDescription{
 					description: fmt.Sprintf("in the repository %s", strings.TrimPrefix(pathToPropose, "github.com/")),
 					query:       newExpr,

@@ -150,7 +150,7 @@ func (r *searchResolver) paginatedResults(ctx context.Context) (result *SearchRe
 	args := search.TextParameters{
 		PatternInfo:     p,
 		RepoPromise:     (&search.Promise{}).Resolve(resolved.RepoRevs),
-		Query:           r.Query,
+		Query:           r.BasicQuery,
 		UseFullDeadline: false,
 		Zoekt:           r.zoekt,
 		SearcherURLs:    r.searcherURLs,

@@ -341,7 +341,7 @@ func (r *searchResolver) logSearchLatency(ctx context.Context, durationMs int32)
 		tr.Finish()
 	}()
 	var types []string
-	resultTypes, _ := r.Query.StringValues(query.FieldType)
+	resultTypes, _ := r.BasicQuery.StringValues(query.FieldType)
 	for _, typ := range resultTypes {
 		switch typ {
 		case "repo", "symbol", "diff", "commit":
@@ -389,7 +389,7 @@ func (r *searchResolver) logSearchLatency(ctx context.Context, durationMs int32)
 			case r.PatternType == query.SearchTypeRegex:
 				types = append(types, "regexp")
 			}
-		} else if len(r.Query.Fields()["file"]) > 0 {
+		} else if len(r.BasicQuery.Fields()["file"]) > 0 {
 			// No search pattern specified and file: is specified.
 			types = append(types, "file")
 		} else {
@@ -426,7 +426,7 @@ func (r *searchResolver) evaluateLeaf(ctx context.Context) (_ *SearchResultsReso
 	}()
 	start := time.Now()
 	// If the request specifies stable:truthy, use pagination to return a stable ordering.
-	if r.Query.BoolValue("stable") {
+	if r.BasicQuery.BoolValue("stable") {
 		result, err := r.paginatedResults(ctx)
 		if err != nil {
 			return nil, err
@@ -745,7 +745,7 @@ func (r *searchResolver) evaluateOr(ctx context.Context, scopeParameters []query
 	}
 
 	wantCount := defaultMaxSearchResults
-	if count := query.Q(scopeParameters).Count(); count != nil {
+	if count := r.BasicQuery.Count(); count != nil {
 		wantCount = *count
 	}
 
@@ -796,34 +796,34 @@ func (r *searchResolver) evaluateOperator(ctx context.Context, scopeParameters [
 // setQuery sets a new query in the search resolver, for potentially repeated
 // calls in the search pipeline. The important part is it takes care of
 // invalidating cached repo info.
-func (r *searchResolver) setQuery(q []query.Basic) {
+func (r *searchResolver) setQuery(q *query.Basic) {
 	if r.invalidateRepoCache {
 		r.resolved.RepoRevs = nil
 		r.resolved.MissingRepoRevs = nil
 		r.repoErr = nil
 	}
-	r.Query = q
+	r.BasicQuery = q
 }
 
 // evaluatePatternExpression evaluates a search pattern containing and/or expressions.
-func (r *searchResolver) evaluatePatternExpression(ctx context.Context, scopeParameters []query.Node, node query.Node) (*SearchResultsResolver, error) {
-	switch term := node.(type) {
+func (r *searchResolver) evaluatePatternExpression(ctx context.Context, q *query.Basic) (*SearchResultsResolver, error) {
+	switch pattern := q.Pattern.(type) {
 	case query.Operator:
-		if term.Kind == query.And || term.Kind == query.Or {
-			return r.evaluateOperator(ctx, scopeParameters, term)
-		} else if term.Kind == query.Concat {
-			r.setQuery(append(scopeParameters, term))
+		if pattern.Kind == query.And || pattern.Kind == query.Or {
+			return r.evaluateOperator(ctx, pattern)
+		} else if pattern.Kind == query.Concat {
+			r.setQuery(q)
 			return r.evaluateLeaf(ctx)
 		}
 	case query.Pattern:
-		r.setQuery(append(scopeParameters, term))
+		r.setQuery(q)
 		return r.evaluateLeaf(ctx)
 	case query.Parameter:
 		// evaluatePatternExpression does not process Parameter nodes.
 		return nil, nil
 	}
 	// Unreachable.
-	return nil, fmt.Errorf("unrecognized type %T in evaluatePatternExpression", node)
+	return nil, fmt.Errorf("unrecognized type %T in evaluatePatternExpression", q.Pattern)
 }
 
 // evaluate evaluates all expressions of a search query.

@@ -192,14 +192,18 @@ func reposToAdd(ctx context.Context, db dbutil.DB, args *search.TextParameters, 
 			// len(repos) could mean we miss some repos since there could be for example len(repos) file matches in
 			// the first repo and some more in other repos.
 			p := search.TextPatternInfo{IsRegExp: true, FileMatchLimit: math.MaxInt32, IncludePatterns: []string{pattern}, PathPatternsAreCaseSensitive: false, PatternMatchesContent: true, PatternMatchesPath: true}
-			q, err := query.ParseLiteral("file:" + pattern)
+			t, err := query.ParseLiteral("file:" + pattern)
+			if err != nil {
+				return nil, err
+			}
+			q, err := query.ToAst(t)
 			if err != nil {
 				return nil, err
 			}
 			newArgs := *args
 			newArgs.PatternInfo = &p
 			newArgs.RepoPromise = (&search.Promise{}).Resolve(repos)
-			newArgs.Query = q
+			newArgs.Query = q[0]
 			newArgs.UseFullDeadline = true
 			matches, _, err := searchFilesInReposBatch(ctx, db, &newArgs)
 			if err != nil {
@@ -219,7 +223,11 @@ func reposToAdd(ctx context.Context, db dbutil.DB, args *search.TextParameters, 
 	if len(args.PatternInfo.FilePatternsReposMustExclude) > 0 {
 		for _, pattern := range args.PatternInfo.FilePatternsReposMustExclude {
 			p := search.TextPatternInfo{IsRegExp: true, FileMatchLimit: math.MaxInt32, IncludePatterns: []string{pattern}, PathPatternsAreCaseSensitive: false, PatternMatchesContent: true, PatternMatchesPath: true}
-			q, err := query.ParseLiteral("file:" + pattern)
+			t, err := query.ParseLiteral("file:" + pattern)
+			if err != nil {
+				return nil, err
+			}
+			q, err := query.ToAst(t)
 			if err != nil {
 				return nil, err
 			}
@@ -227,7 +235,7 @@ func reposToAdd(ctx context.Context, db dbutil.DB, args *search.TextParameters, 
 			newArgs.PatternInfo = &p
 			rp := (&search.Promise{}).Resolve(repos)
 			newArgs.RepoPromise = rp
-			newArgs.Query = q
+			newArgs.Query = q[0] // yikes
 			newArgs.UseFullDeadline = true
 			matches, _, err := searchFilesInReposBatch(ctx, db, &newArgs)
 			if err != nil {

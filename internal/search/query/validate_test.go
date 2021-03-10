@@ -98,8 +98,7 @@ func TestAndOrQuery_Validation(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run("validate and/or query", func(t *testing.T) {
-			nodes, _ := ProcessAndOr(c.input, ParserOptions{c.searchType, false})
-			_, err := toAst(nodes)
+			_, err := Pipeline(c.input, ParserOptions{c.searchType, false})
 			if err == nil {
 				t.Fatal(fmt.Sprintf("expected test for %s to fail", c.input))
 			}
@@ -136,8 +135,7 @@ func TestAndOrQuery_IsCaseSensitive(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			nodes, _ := ProcessAndOr(c.input, ParserOptions{SearchTypeRegex, false})
-			query, err := toAst(nodes)
+			query, err := Pipeline(c.input, ParserOptions{SearchTypeRegex, false})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -167,8 +165,7 @@ func TestAndOrQuery_RegexpPatterns(t *testing.T) {
 		},
 	}
 	t.Run("for regexp field", func(t *testing.T) {
-		nodes, _ := ProcessAndOr(c.query, ParserOptions{SearchTypeRegex, false})
-		query, err := toAst(nodes)
+		query, err := Pipeline(c.query, ParserOptions{SearchTypeRegex, false})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -376,19 +373,15 @@ func TestHasTypeRepo(t *testing.T) {
 			query:           "repository",
 			wantHasTypeRepo: false,
 		},
-		{
-			query:           "",
-			wantHasTypeRepo: false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			q, err := ParseLiteral(tt.query)
+			q, err := Pipeline(tt.query, ParserOptions{SearchTypeLiteral, false})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := HasTypeRepo(q); got != tt.wantHasTypeRepo {
+			if got := HasTypeRepo(q[0]); got != tt.wantHasTypeRepo {
 				t.Fatalf("got %t, expected %t", got, tt.wantHasTypeRepo)
 			}
 		})

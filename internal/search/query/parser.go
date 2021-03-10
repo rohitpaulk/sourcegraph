@@ -1096,9 +1096,9 @@ func ParseRegexp(in string) (Q, error) {
 	return ProcessAndOr(in, ParserOptions{SearchType: SearchTypeRegex})
 }
 
-func toAst(query Q) (AST, error) {
+func ToAst(query Q) (AST, error) {
 	var err error
-	var ast []Basic
+	var ast AST
 	for _, disjunct := range Dnf(query) {
 		err = validate(disjunct)
 		if err != nil {
@@ -1108,7 +1108,21 @@ func toAst(query Q) (AST, error) {
 		if err != nil {
 			return nil, err
 		}
-		ast = append(ast, *basic)
+		ast = append(ast, basic)
+	}
+	return ast, nil
+}
+
+// Pipeline takes an initial string input and parser options, and produces a
+// validated AST comprising a list of Basic queries to evaluate.
+func Pipeline(in string, options ParserOptions) (AST, error) {
+	parseTree, err := ProcessAndOr(in, options)
+	if err != nil {
+		return nil, err
+	}
+	ast, err := ToAst(parseTree)
+	if err != nil {
+		return nil, err
 	}
 	return ast, nil
 }

@@ -91,35 +91,44 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 		return nil, errors.New("Structural search is disabled in the site configuration.")
 	}
 
-	var q query.Q
 	globbing := getBoolPtr(settings.SearchGlobbing, false)
 	tr.LogFields(otlog.Bool("globbing", globbing))
-	q, err = query.ProcessAndOr(args.Query, query.ParserOptions{SearchType: searchType, Globbing: globbing})
+
+	var q query.AST
+	q, err = query.Pipeline(args.Query, query.ParserOptions{SearchType: searchType, Globbing: globbing})
 	if err != nil {
 		return alertForQuery(db, args.Query, err), nil
 	}
 	if getBoolPtr(settings.SearchUppercase, false) {
-		q = query.SearchUppercase(q)
+		tree := query.SearchUppercase(query.ToParseTree(q))
+		q, err := query.ToAst(tree) // horrendously fucked
+		if err != nil {
+			return nil, err
+		}
 	}
 	tr.LazyPrintf("parsing done")
 
 	// We do not support stable for streaming
-	if args.Stream != nil && q.BoolValue(query.FieldStable) {
+	// put this shit in parser
+	if args.Stream != nil && len(q) > 0 && q[0].BoolValue(query.FieldStable) {
 		return alertForQuery(db, args.Query, errors.New("stable is not supported for the streaming API. Please remove from query")), nil
 	}
 
 	// If stable:truthy is specified, make the query return a stable result ordering.
-	if q.BoolValue(query.FieldStable) {
-		args, q, err = queryForStableResults(args, q)
-		if err != nil {
-			return alertForQuery(db, args.Query, err), nil
+	// put this shit in parser
+	/*
+		if len(q) == 1 && q[0].BoolValue(query.FieldStable) {
+			args, q, err = queryForStableResults(args, q[0])
+			if err != nil {
+				return alertForQuery(db, args.Query, err), nil
+			}
 		}
-	}
+	*/
 
 	// If the request is a paginated one, decode those arguments now.
 	var pagination *searchPaginationInfo
 	if args.First != nil {
-		pagination, err = processPaginationRequest(args, q)
+		pagination, err = processPaginationRequest(args, q[0])
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +143,7 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 		defaultLimit = defaultMaxSearchResults
 	}
 
-	if sp, _ := q.StringValue(query.FieldSelect); sp != "" && args.Stream != nil {
+	if sp, _ := q[0].StringValue(query.FieldSelect); sp != "" && args.Stream != nil {
 		// Invariant: error already checked
 		selectPath, _ := filter.SelectPathFromString(sp)
 		args.Stream = WithSelect(args.Stream, selectPath)
@@ -168,6 +177,7 @@ func (r *schemaResolver) Search(ctx context.Context, args *SearchArgs) (SearchIm
 
 // queryForStableResults transforms a query that returns a stable result
 // ordering. The transformed query uses pagination underneath the hood.
+/*
 func queryForStableResults(args *SearchArgs, q query.Q) (*SearchArgs, query.Q, error) {
 	if q.BoolValue(query.FieldStable) {
 		var stableResultCount int32 = defaultMaxSearchResults
@@ -187,8 +197,9 @@ func queryForStableResults(args *SearchArgs, q query.Q) (*SearchArgs, query.Q, e
 	}
 	return args, q, nil
 }
+*/
 
-func processPaginationRequest(args *SearchArgs, q query.Q) (*searchPaginationInfo, error) {
+func processPaginationRequest(args *SearchArgs, q *query.Basic) (*searchPaginationInfo, error) {
 	var pagination *searchPaginationInfo
 	if args.First != nil {
 		cursor, err := unmarshalSearchCursor(args.After)
@@ -270,7 +281,7 @@ func getBoolPtr(b *bool, def bool) bool {
 // SearchInputs contains fields we set before kicking off search.
 type SearchInputs struct {
 	BasicQuery      *query.Basic          // the current query under evaluation, a leaf node of ExpressionQuery
-	ExpressionQuery query.Q               // the entire query expression tree
+	ExpressionQuery query.AST             // the entire query expression tree
 	OriginalQuery   string                // the raw string of the original search query
 	Pagination      *searchPaginationInfo // pagination information, or nil if the request is not paginated.
 	PatternType     query.SearchType

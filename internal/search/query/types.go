@@ -44,6 +44,15 @@ type QueryInfo interface {
 	IsCaseSensitive() bool
 }
 
+// A query is a tree of Nodes. We choose the type name Q so that external uses like query.Q do not stutter.
+type Q []Node
+
+func (q Q) String() string {
+	return toString(q)
+}
+
+type AST []*Basic
+
 // Basic represents a leaf expression that we can evaluate in our search engine.
 // A basic query comprises (1) a single search pattern expression and (2)
 // parameters that scope the evaluation of search patterns (e.g., to repos,
@@ -53,17 +62,8 @@ type Basic struct {
 	Parameters []Parameter
 }
 
-type AST []Basic
-
-// A query is a tree of Nodes. We choose the type name Q so that external uses like query.Q do not stutter.
-type Q []Node
-
-func (q Q) String() string {
-	return toString(q)
-}
-
 func (q *Basic) RegexpPatterns(field string) (values, negatedValues []string) {
-	VisitField(basicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
 		if negated {
 			negatedValues = append(negatedValues, visitedValue)
 		} else {
@@ -74,7 +74,7 @@ func (q *Basic) RegexpPatterns(field string) (values, negatedValues []string) {
 }
 
 func (q *Basic) StringValues(field string) (values, negatedValues []string) {
-	VisitField(basicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
 		if negated {
 			negatedValues = append(negatedValues, visitedValue)
 		} else {
@@ -85,7 +85,7 @@ func (q *Basic) StringValues(field string) (values, negatedValues []string) {
 }
 
 func (q *Basic) StringValue(field string) (value, negatedValue string) {
-	VisitField(basicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), field, func(visitedValue string, negated bool, _ Annotation) {
 		if negated {
 			negatedValue = visitedValue
 		} else {
@@ -97,7 +97,7 @@ func (q *Basic) StringValue(field string) (value, negatedValue string) {
 
 func (q *Basic) Values(field string) []*Value {
 	var values []*Value
-	nodes := basicToParseTree(q)
+	nodes := BasicToParseTree(q)
 	if field == "" {
 		VisitPattern(nodes, func(value string, _ bool, annotation Annotation) {
 			values = append(values, valueToTypedValue(field, value, annotation.Labels)...)
@@ -112,7 +112,7 @@ func (q *Basic) Values(field string) []*Value {
 
 func (q *Basic) Fields() map[string][]*Value {
 	fields := make(map[string][]*Value)
-	nodes := basicToParseTree(q)
+	nodes := BasicToParseTree(q)
 	VisitPattern(nodes, func(value string, _ bool, _ Annotation) {
 		fields[""] = q.Values("")
 	})
@@ -124,7 +124,7 @@ func (q *Basic) Fields() map[string][]*Value {
 
 func (q *Basic) BoolValue(field string) bool {
 	result := false
-	VisitField(basicToParseTree(q), field, func(value string, _ bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), field, func(value string, _ bool, _ Annotation) {
 		result, _ = parseBool(value) // err was checked during parsing and validation.
 	})
 	return result
@@ -132,7 +132,7 @@ func (q *Basic) BoolValue(field string) bool {
 
 func (q *Basic) Count() *int {
 	var count *int
-	VisitField(basicToParseTree(q), FieldCount, func(value string, _ bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), FieldCount, func(value string, _ bool, _ Annotation) {
 		c, err := strconv.Atoi(value)
 		if err != nil {
 			panic(fmt.Sprintf("Value %q for count cannot be parsed as an int: %s", value, err))
@@ -148,7 +148,7 @@ func (q *Basic) Archived() *YesNoOnly {
 
 func (q *Basic) yesNoOnlyValue(field string) *YesNoOnly {
 	var res *YesNoOnly
-	VisitField(basicToParseTree(q), field, func(value string, _ bool, _ Annotation) {
+	VisitField(BasicToParseTree(q), field, func(value string, _ bool, _ Annotation) {
 		yno := ParseYesNoOnly(value)
 		if yno == Invalid {
 			panic(fmt.Sprintf("Invalid value %q for field %q", value, field))
