@@ -6,6 +6,12 @@ env:
   SRC_GIT_SERVER_1: 127.0.0.1:3178
   SRC_GIT_SERVERS: 127.0.0.1:3178
 
+  DEPLOY_TYPE: dev
+
+  SRC_HTTP_ADDR: ":3082"
+  SOURCEGRAPH_HTTPS_DOMAIN: sourcegraph.test
+  SOURCEGRAPH_HTTPS_PORT: 3443
+
   GOLANGSERVER_SRC_GIT_SERVERS: host.docker.internal:3178
   GITHUB_BASE_URL: http://127.0.0.1:3180
   SEARCHER_URL: http://127.0.0.1:3181
@@ -18,19 +24,12 @@ env:
   GRAFANA_SERVER_URL: http://localhost:3370
   PROMETHEUS_URL: http://localhost:9090
   JAEGER_SERVER_URL: http://localhost:16686
+  ZOEKT_HOST: localhost:3070
   # This needs to be empty?
   SRC_PROF_HTTP: ""
   OVERRIDE_AUTH_SECRET: sSsNGlI8fBDftBz0LDQNXEnP6lrWdt9g0fK6hoFvGQ
-  DEPLOY_TYPE: dev
-  ZOEKT_HOST: localhost:3070
   USE_ENHANCED_LANGUAGE_DETECTION: -1
-  SOURCEGRAPH_HTTPS_DOMAIN: sourcegraph.test
-  SOURCEGRAPH_HTTPS_PORT: 3443
-  SRC_HTTP_ADDR: ":3082"
   # web
-  WEBPACK_DEV_SERVER: 1
-  NODE_ENV: development
-  NODE_OPTIONS: "--max_old_space_size=4096"
   # PATH: $PWD/.bin:$PWD/node_modules/.bin:$PATH
   # Enable sharded indexed search mode
   # [ -n "${DISABLE_SEARCH_SHARDING-}" ] || export INDEXED_SEARCH_SERVERS="localhost:3070 localhost:3071"
@@ -121,6 +120,10 @@ commands:
   web:
     cmd: ./node_modules/.bin/gulp --silent --color dev
     install: yarn --no-progress
+    env:
+      WEBPACK_DEV_SERVER: 1
+      NODE_ENV: development
+      NODE_OPTIONS: "--max_old_space_size=4096"
 
   # [...]
 
@@ -143,6 +146,7 @@ commandsets:
     - symbols
     - query-runner
     - web
+    - caddy
 
   # This is the set that will be used when `sg start` is run:
   default:
@@ -169,6 +173,7 @@ commandsets:
     - prometheus
     - grafana
     - postgres_exporter
+
   enterprise:
     - enterprise-gitserver
     - enterprise-query-runner
