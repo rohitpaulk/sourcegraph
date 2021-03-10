@@ -12,6 +12,14 @@
   - [Edit configuration files](#edit-configuration-files)
 - [Configuration](#configuration)
 
+## Quickstart
+
+This is mostly meant for developing `sg`:
+
+```
+go run . -config sg.config.example.yaml run-set basic
+```
+
 ## TODOs
 
 - [ ] Build everything below

@@ -1,48 +1,148 @@
 env:
   SRC_REPOS_DIR: $HOME/.sourcegraph/repos
+  SRC_LOG_LEVEL: info
+  SRC_LOG_FORMAT: condensed
+  INSECURE_DEV: 1
+  SRC_GIT_SERVER_1: 127.0.0.1:3178
+  SRC_GIT_SERVERS: 127.0.0.1:3178
+
+  GOLANGSERVER_SRC_GIT_SERVERS: host.docker.internal:3178
+  GITHUB_BASE_URL: http://127.0.0.1:3180
+  SEARCHER_URL: http://127.0.0.1:3181
+  REPO_UPDATER_URL: http://127.0.0.1:3182
+  REDIS_ENDPOINT: 127.0.0.1:6379
+  QUERY_RUNNER_URL: http://localhost:3183
+  SYMBOLS_URL: http://localhost:3184
+  SRC_SYNTECT_SERVER: http://localhost:9238
+  SRC_FRONTEND_INTERNAL: localhost:3090
+  GRAFANA_SERVER_URL: http://localhost:3370
+  PROMETHEUS_URL: http://localhost:9090
+  JAEGER_SERVER_URL: http://localhost:16686
+  # This needs to be empty?
+  SRC_PROF_HTTP: ""
+  OVERRIDE_AUTH_SECRET: sSsNGlI8fBDftBz0LDQNXEnP6lrWdt9g0fK6hoFvGQ
+  DEPLOY_TYPE: dev
+  ZOEKT_HOST: localhost:3070
+  USE_ENHANCED_LANGUAGE_DETECTION: -1
+  SOURCEGRAPH_HTTPS_DOMAIN: sourcegraph.test
+  SOURCEGRAPH_HTTPS_PORT: 3443
+  SRC_HTTP_ADDR: ":3082"
+  # web
+  WEBPACK_DEV_SERVER: 1
+  NODE_ENV: development
+  NODE_OPTIONS: "--max_old_space_size=4096"
+  # PATH: $PWD/.bin:$PWD/node_modules/.bin:$PATH
+  # Enable sharded indexed search mode
+  # [ -n "${DISABLE_SEARCH_SHARDING-}" ] || export INDEXED_SEARCH_SERVERS="localhost:3070 localhost:3071"
+  # if [ -z "${DEV_NO_CONFIG-}" ]; then
+  SITE_CONFIG_FILE: ./dev/site-config.json
+  GLOBAL_SETTINGS_FILE: ./dev/global-settings.json
+  SITE_CONFIG_ALLOW_EDITS: true
+  GLOBAL_SETTINGS_ALLOW_EDITS: true
+# fi
 
 commands:
+  frontend:
+    cmd: ulimit -n 10000 && .bin/frontend
+    install: go build -o .bin/frontend github.com/sourcegraph/sourcegraph/cmd/frontend
+    env:
+      CONFIGURATION_MODE: server
+    watch:
+      - internal
+      - cmd/frontend
+
+  enterprise-frontend:
+    cmd: .bin/enterprise-frontend
+    install: go build -o .bin/enterprise-frontend github.com/sourcegraph/sourcegraph/enterprise/cmd/frontend
+    watch:
+      - internal
+      - cmd/frontend
+      - enterprise/cmd/frontend
+
   gitserver:
     cmd: .bin/gitserver
     install: go build -o .bin/gitserver github.com/sourcegraph/sourcegraph/cmd/gitserver
     env:
-      HOSTNAME: $SRC_GIT_SERVER_1
+      HOSTNAME: 127.0.0.1:3178
     watch:
       - internal
       - cmd/gitserver
 
-  enterprise-gitserver:
+  repo-updater:
+    cmd: .bin/repo-updater
+    install: go build -o .bin/repo-updater github.com/sourcegraph/sourcegraph/cmd/repo-updater
+    watch:
+      - internal
+      - cmd/repo-updater
+
+  enterprise-repo-updater:
     cmd: .bin/repo-updater
     install: go build -o .bin/repo-updater github.com/sourcegraph/sourcegraph/enterprise/cmd/repo-updater
     env:
       HOSTNAME: $SRC_GIT_SERVER_1
     watch:
       - internal
-      - cmd/gitserver
+      - cmd/repo-updater
       - enterprise/cmd/repo-updater
 
   query-runner:
     cmd: .bin/query-runner
     install: go build -o .bin/query-runner github.com/sourcegraph/sourcegraph/cmd/query-runner
+    watch:
+      - internal
+      - cmd/query-runner
+
+  symbols:
+    cmd: .bin/symbols
+    install: |
+      ./dev/libsqlite3-pcre/build.sh &&
+      ./cmd/symbols/build-ctags.sh &&
+      go build -o .bin/symbols github.com/sourcegraph/sourcegraph/cmd/symbols
+    env:
+      LIBSQLITE3_PCRE: ./dev/libsqlite3-pcre/build.sh libpath
+      CTAGS_COMMAND: cmd/symbols/universal-ctags-dev
+      CTAGS_PROCESSES: 2
+    watch:
+      - internal
+      - cmd/symbols
 
   searcher:
     cmd: .bin/searcher
     install: go build -o .bin/searcher github.com/sourcegraph/sourcegraph/cmd/searcher
+    watch:
+      - internal
+      - cmd/searcher
 
   caddy:
+    cmd: .bin/caddy_2.3.0_mac_amd64 run --watch --config=dev/Caddyfile
     install_doc.darwin: "use brew install"
     install_doc.linux: "use apt install"
 
   web:
     cmd: ./node_modules/.bin/gulp --silent --color dev
-    install: yarn install
+    install: yarn --no-progress
 
   # [...]
 
 commandsets:
-  gitservers:
+  basic:
+    - frontend
+    - repo-updater
     - gitserver
-    - enterprise-gitserver
+    - searcher
+    - symbols
+    - query-runner
+    - web
+    - caddy
+
+  basic-enterprise:
+    - enterprise-frontend
+    - enterprise-repo-updater
+    - gitserver
+    - searcher
+    - symbols
+    - query-runner
+    - web
 
   # This is the set that will be used when `sg start` is run:
   default:
@@ -61,6 +161,7 @@ commandsets:
     - zoekt-indexserver-1
     - zoekt-webserver-0
     - zoekt-webserver-1
+
   # Another set that can be run with `sg run-set monitoring`:
   monitoring:
     - jaeger

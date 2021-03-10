@@ -106,7 +106,7 @@ func runWatch(ctx context.Context, cmd Command, root string, reload <-chan struc
 
 			scanner := bufio.NewScanner(r)
 			for scanner.Scan() {
-				fmt.Fprintf(os.Stdout, "%s: %s\n", prefix, scanner.Text())
+				fmt.Fprintf(os.Stdout, "[%s] %s: %s\n", cmd.Name, prefix, scanner.Text())
 			}
 		}
 
