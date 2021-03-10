@@ -1102,3 +1102,30 @@ func ParseLiteral(in string) (Q, error) {
 func ParseRegexp(in string) (Q, error) {
 	return Parse(in, ParserOptions{SearchType: SearchTypeRegex})
 }
+
+// Pipeline parses the query string and performs query expansion to generate
+// possibly multiple disjoint queries to execute (results should be unioned).
+func Pipeline(in string, options ParserOptions) (Plan, error) {
+	parseTree, err := Parse(in, options)
+	if err != nil {
+		return nil, err
+	}
+
+	var plan Plan
+	for _, disjunct := range Dnf(parseTree) {
+		err = validate(disjunct)
+		if err != nil {
+			return nil, err
+		}
+		plan = append(plan, Q(disjunct))
+	}
+	return plan, nil
+}
+
+// ToSingleQuery casts a plan of queries to a single query to evaluate if possible.
+func ToSingleQuery(p Plan) Q {
+	if len(p) != 1 {
+		panic("Cast for plan query failed: multiple queries to evaluate")
+	}
+	return p[0]
+}

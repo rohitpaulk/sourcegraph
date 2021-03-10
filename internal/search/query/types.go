@@ -48,6 +48,8 @@ type QueryInfo interface {
 	IsCaseSensitive() bool
 }
 
+type Plan []Q
+
 // A query is a tree of Nodes. We choose the type name Q so that external uses like query.Q do not stutter.
 type Q []Node
 
