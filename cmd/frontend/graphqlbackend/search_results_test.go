@@ -865,6 +865,7 @@ func TestSearchResultsHydration(t *testing.T) {
 	resolver := &searchResolver{
 		db: db,
 		SearchInputs: &SearchInputs{
+			Plan:         query.Plan([]query.Q{q}),
 			Query:        q,
 			UserSettings: &schema.Settings{},
 		},

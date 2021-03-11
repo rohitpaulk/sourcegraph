@@ -90,24 +90,24 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 		return nil, errors.New("Structural search is disabled in the site configuration.")
 	}
 
-	var q query.Q
+	var q query.Plan
 	globbing := getBoolPtr(settings.SearchGlobbing, false)
 	tr.LogFields(otlog.Bool("globbing", globbing))
-	q, err = query.Parse(args.Query, query.ParserOptions{SearchType: searchType, Globbing: globbing})
+	q, err = query.Pipeline(args.Query, query.ParserOptions{SearchType: searchType, Globbing: globbing})
 	if err != nil {
 		return alertForQuery(db, args.Query, err), nil
 	}
 	tr.LazyPrintf("parsing done")
 
 	// We do not support stable for streaming
-	if args.Stream != nil && q.BoolValue(query.FieldStable) {
+	if args.Stream != nil && q.ToParseTree().BoolValue(query.FieldStable) {
 		return alertForQuery(db, args.Query, errors.New("stable is not supported for the streaming API. Please remove from query")), nil
 	}
 
 	// If the request is a paginated one, decode those arguments now.
 	var pagination *searchPaginationInfo
 	if args.First != nil {
-		pagination, err = processPaginationRequest(args, q)
+		pagination, err = processPaginationRequest(args, q.ToParseTree())
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 		defaultLimit = defaultMaxSearchResults
 	}
 
-	if sp, _ := q.StringValue(query.FieldSelect); sp != "" && args.Stream != nil {
+	if sp, _ := q.ToParseTree().StringValue(query.FieldSelect); sp != "" && args.Stream != nil {
 		// Invariant: error already checked
 		selectPath, _ := filter.SelectPathFromString(sp)
 		args.Stream = WithSelect(args.Stream, selectPath)
@@ -131,7 +131,8 @@ func NewSearchImplementer(ctx context.Context, db dbutil.DB, args *SearchArgs) (
 	return &searchResolver{
 		db: db,
 		SearchInputs: &SearchInputs{
-			Query:          q,
+			Plan:           q,
+			Query:          q.ToParseTree(),
 			OriginalQuery:  args.Query,
 			VersionContext: args.VersionContext,
 			UserSettings:   settings,
@@ -234,7 +235,8 @@ func getBoolPtr(b *bool, def bool) bool {
 
 // SearchInputs contains fields we set before kicking off search.
 type SearchInputs struct {
-	Query          query.Q               // the query
+	Plan           query.Plan            // the query plan
+	Query          query.Q               // the current basic query being evaluated, one of query.Plan
 	OriginalQuery  string                // the raw string of the original search query
 	Pagination     *searchPaginationInfo // pagination information, or nil if the request is not paginated.
 	PatternType    query.SearchType

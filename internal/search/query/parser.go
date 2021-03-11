@@ -1102,3 +1102,19 @@ func ParseLiteral(in string) (Q, error) {
 func ParseRegexp(in string) (Q, error) {
 	return Parse(in, ParserOptions{SearchType: SearchTypeRegex})
 }
+
+type queryParser func(string) (Q, error)
+
+func LiteralParser() queryParser {
+	return ParseLiteral
+}
+
+func LiteralRegexp() queryParser {
+	return ParseLiteral
+}
+
+func Default() queryParser {
+	return ParseLiteral
+}
+
+// func WithGlobbing()...

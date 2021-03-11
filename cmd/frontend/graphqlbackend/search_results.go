@@ -869,17 +869,16 @@ func (r *searchResolver) Results(ctx context.Context) (srr *SearchResultsResolve
 	}()
 
 	wantCount := defaultMaxSearchResults
-	if count := r.Query.Count(); count != nil {
+	if count := r.Plan.ToParseTree().Count(); count != nil {
 		wantCount = *count
 	}
 
-	if invalidateRepoCache(r.Query) {
+	if invalidateRepoCache(r.Plan.ToParseTree()) {
 		r.invalidateRepoCache = true
 	}
 
-	for _, disjunct := range query.Dnf(r.Query) {
-		disjunct = query.ConcatRevFilters(disjunct)
-		newResult, err := r.evaluate(ctx, disjunct)
+	for _, query := range r.Plan {
+		newResult, err := r.evaluate(ctx, query)
 		if err != nil {
 			// Fail if any subquery fails.
 			return nil, err
