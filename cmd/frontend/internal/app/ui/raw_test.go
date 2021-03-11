@@ -22,6 +22,13 @@ import (
 // each of the gitserver client methods.
 func initHTTPTestGitServer(t *testing.T, httpStatusCode int, resp string) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Trailer", "X-Exec-Error")
+		w.Header().Add("Trailer", "X-Exec-Exit-Status")
+		w.Header().Add("Trailer", "X-Exec-Stderr")
+		w.Header().Set("X-Exec-Error", "")
+		w.Header().Set("X-Exec-Exit-Status", "0")
+		w.Header().Set("X-Exec-Stderr", "")
+		// fmt.Println("is this even called?")
 		w.WriteHeader(httpStatusCode)
 		_, err := w.Write([]byte(resp))
 		if err != nil {
@@ -52,7 +59,7 @@ func Test_serveRawWithHTTPRequestMethodHEAD(t *testing.T) {
 	t.Run("success response for HEAD request", func(t *testing.T) {
 		// httptest server will return a 200 OK, so gitserver.DefaultClient.RepoInfo will not return
 		// an error.
-		initHTTPTestGitServer(t, http.StatusOK, "{}")
+		initHTTPTestGitServer(t, http.StatusOK, "this is the stdout of git archive command")
 
 		req := httptest.NewRequest("HEAD", "/github.com/sourcegraph/sourcegraph/-/raw", nil)
 		w := httptest.NewRecorder()

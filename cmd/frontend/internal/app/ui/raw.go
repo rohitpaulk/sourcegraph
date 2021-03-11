@@ -190,6 +190,7 @@ func serveRaw(w http.ResponseWriter, r *http.Request) (err error) {
 
 		_, err = io.Copy(w, f)
 		if err != nil {
+			fmt.Printf("is this the error?\n")
 			log15.Error(err.Error())
 		}
 		fmt.Println("wrote to recorder")

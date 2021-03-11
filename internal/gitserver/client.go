@@ -237,6 +237,7 @@ type badRequestError struct{ error }
 func (e badRequestError) BadRequest() bool { return true }
 
 func (c *Cmd) sendExec(ctx context.Context) (_ io.ReadCloser, _ http.Header, errRes error) {
+	fmt.Println("WOOOOOOPS!")
 	repoName := protocol.NormalizeRepo(c.Repo)
 
 	span, ctx := ot.StartSpanFromContext(ctx, "Client.sendExec")
@@ -269,6 +270,7 @@ func (c *Cmd) sendExec(ctx context.Context) (_ io.ReadCloser, _ http.Header, err
 
 	switch resp.StatusCode {
 	case http.StatusOK:
+		fmt.Println("are we here?")
 		return resp.Body, resp.Trailer, nil
 
 	case http.StatusNotFound:
