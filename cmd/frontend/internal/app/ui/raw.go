@@ -145,6 +145,8 @@ func serveRaw(w http.ResponseWriter, r *http.Request) (err error) {
 
 	switch contentType {
 	case applicationZip, applicationXTar:
+		fmt.Println("handing zip / tar")
+
 		// Set the proper filename field, so that downloading "/github.com/gorilla/mux/-/raw" gives us a
 		// "mux.zip" file (e.g. when downloading via a browser) or a .tar file depending on the contentType.
 		ext := ".zip"
@@ -187,6 +189,10 @@ func serveRaw(w http.ResponseWriter, r *http.Request) (err error) {
 		defer f.Close()
 
 		_, err = io.Copy(w, f)
+		if err != nil {
+			log15.Error(err.Error())
+		}
+		fmt.Println("wrote to recorder")
 		return err
 
 	default:
